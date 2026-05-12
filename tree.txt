@@ -1,0 +1,430 @@
+.
+├── add_py_extension.sh
+├── calcul_indic.py
+├── calcul_indic.R
+├── calcul lea corneille.Rproj
+├── calculs.qmd
+├── code_pour_lea.qmd
+├── data
+│   ├── Communes
+│   │   ├── COMMUNE_SPF.dbf
+│   │   ├── COMMUNE_SPF.shp
+│   │   └── COMMUNE_SPF.shx
+│   ├── corresp.csv
+│   ├── exposure_tn_classes_65+_abs.csv
+│   ├── exposure_tn_classes_65-_abs.csv
+│   ├── exposure_tn_p90_classes_65+_abs.csv
+│   ├── exposure_tropnight_classes_65+_abs.csv
+│   ├── exposure_tropnight_classes_65-_abs.csv
+│   ├── exposure_tropnight_dates_65+_abs.csv
+│   ├── exposure_tropnight_dates_65-_abs.csv
+│   ├── exposure_waterfall_v2.zip
+│   ├── exposure_waterfall.zip
+│   ├── final_data_consecutive.parquet
+│   ├── final_data.parquet
+│   ├── IRIS
+│   │   └── zones_IPR.csv
+│   ├── memoire_df_consecutive.parquet
+│   ├── memoire_df.parquet
+│   ├── NFR010C
+│   │   ├── tm_comSPF_NFR010C_2000.nc
+│   │   ├── tm_comSPF_NFR010C_2001.nc
+│   │   ├── tm_comSPF_NFR010C_2002.nc
+│   │   ├── tm_comSPF_NFR010C_2003.nc
+│   │   ├── tm_comSPF_NFR010C_2004.nc
+│   │   ├── tm_comSPF_NFR010C_2005.nc
+│   │   ├── tm_comSPF_NFR010C_2006.nc
+│   │   ├── tm_comSPF_NFR010C_2007.nc
+│   │   ├── tm_comSPF_NFR010C_2008.nc
+│   │   ├── tm_comSPF_NFR010C_2009.nc
+│   │   ├── tm_comSPF_NFR010C_2010.nc
+│   │   ├── tm_comSPF_NFR010C_2011.nc
+│   │   ├── tm_comSPF_NFR010C_2012.nc
+│   │   ├── tm_comSPF_NFR010C_2013.nc
+│   │   ├── tm_comSPF_NFR010C_2014.nc
+│   │   ├── tm_comSPF_NFR010C_2015.nc
+│   │   ├── tm_comSPF_NFR010C_2016.nc
+│   │   ├── tm_comSPF_NFR010C_2017.nc
+│   │   ├── tm_comSPF_NFR010C_2018.nc
+│   │   ├── tm_comSPF_NFR010C_2019.nc
+│   │   ├── tm_comSPF_NFR010C_2020.nc
+│   │   ├── tm_comSPF_NFR010C_2021.nc
+│   │   ├── tm_comSPF_NFR010C_2022.nc
+│   │   ├── tn_comSPF_NFR010C_2000.nc
+│   │   ├── tn_comSPF_NFR010C_2001.nc
+│   │   ├── tn_comSPF_NFR010C_2002.nc
+│   │   ├── tn_comSPF_NFR010C_2003.nc
+│   │   ├── tn_comSPF_NFR010C_2004.nc
+│   │   ├── tn_comSPF_NFR010C_2005.nc
+│   │   ├── tn_comSPF_NFR010C_2006.nc
+│   │   ├── tn_comSPF_NFR010C_2007.nc
+│   │   ├── tn_comSPF_NFR010C_2008.nc
+│   │   ├── tn_comSPF_NFR010C_2009.nc
+│   │   ├── tn_comSPF_NFR010C_2010.nc
+│   │   ├── tn_comSPF_NFR010C_2011.nc
+│   │   ├── tn_comSPF_NFR010C_2012.nc
+│   │   ├── tn_comSPF_NFR010C_2013.nc
+│   │   ├── tn_comSPF_NFR010C_2014.nc
+│   │   ├── tn_comSPF_NFR010C_2015.nc
+│   │   ├── tn_comSPF_NFR010C_2016.nc
+│   │   ├── tn_comSPF_NFR010C_2017.nc
+│   │   ├── tn_comSPF_NFR010C_2018.nc
+│   │   ├── tn_comSPF_NFR010C_2019.nc
+│   │   ├── tn_comSPF_NFR010C_2020.nc
+│   │   ├── tn_comSPF_NFR010C_2021.nc
+│   │   ├── tn_comSPF_NFR010C_2022.nc
+│   │   ├── tx_comSPF_NFR010C_2000.nc
+│   │   ├── tx_comSPF_NFR010C_2001.nc
+│   │   ├── tx_comSPF_NFR010C_2002.nc
+│   │   ├── tx_comSPF_NFR010C_2003.nc
+│   │   ├── tx_comSPF_NFR010C_2004.nc
+│   │   ├── tx_comSPF_NFR010C_2005.nc
+│   │   ├── tx_comSPF_NFR010C_2006.nc
+│   │   ├── tx_comSPF_NFR010C_2007.nc
+│   │   ├── tx_comSPF_NFR010C_2008.nc
+│   │   ├── tx_comSPF_NFR010C_2009.nc
+│   │   ├── tx_comSPF_NFR010C_2010.nc
+│   │   ├── tx_comSPF_NFR010C_2011.nc
+│   │   ├── tx_comSPF_NFR010C_2012.nc
+│   │   ├── tx_comSPF_NFR010C_2013.nc
+│   │   ├── tx_comSPF_NFR010C_2014.nc
+│   │   ├── tx_comSPF_NFR010C_2015.nc
+│   │   ├── tx_comSPF_NFR010C_2016.nc
+│   │   ├── tx_comSPF_NFR010C_2017.nc
+│   │   ├── tx_comSPF_NFR010C_2018.nc
+│   │   ├── tx_comSPF_NFR010C_2019.nc
+│   │   ├── tx_comSPF_NFR010C_2020.nc
+│   │   ├── tx_comSPF_NFR010C_2021.nc
+│   │   └── tx_comSPF_NFR010C_2022.nc
+│   ├── NFR010C.parquet
+│   ├── NFR010D
+│   │   ├── tm_comSPF_NFR010D_2000.nc
+│   │   ├── tm_comSPF_NFR010D_2001.nc
+│   │   ├── tm_comSPF_NFR010D_2002.nc
+│   │   ├── tm_comSPF_NFR010D_2003.nc
+│   │   ├── tm_comSPF_NFR010D_2004.nc
+│   │   ├── tm_comSPF_NFR010D_2005.nc
+│   │   ├── tm_comSPF_NFR010D_2006.nc
+│   │   ├── tm_comSPF_NFR010D_2007.nc
+│   │   ├── tm_comSPF_NFR010D_2008.nc
+│   │   ├── tm_comSPF_NFR010D_2009.nc
+│   │   ├── tm_comSPF_NFR010D_2010.nc
+│   │   ├── tm_comSPF_NFR010D_2011.nc
+│   │   ├── tm_comSPF_NFR010D_2012.nc
+│   │   ├── tm_comSPF_NFR010D_2013.nc
+│   │   ├── tm_comSPF_NFR010D_2014.nc
+│   │   ├── tm_comSPF_NFR010D_2015.nc
+│   │   ├── tm_comSPF_NFR010D_2016.nc
+│   │   ├── tm_comSPF_NFR010D_2017.nc
+│   │   ├── tm_comSPF_NFR010D_2018.nc
+│   │   ├── tm_comSPF_NFR010D_2019.nc
+│   │   ├── tm_comSPF_NFR010D_2020.nc
+│   │   ├── tm_comSPF_NFR010D_2021.nc
+│   │   ├── tm_comSPF_NFR010D_2022.nc
+│   │   ├── tn_comSPF_NFR010D_2000.nc
+│   │   ├── tn_comSPF_NFR010D_2001.nc
+│   │   ├── tn_comSPF_NFR010D_2002.nc
+│   │   ├── tn_comSPF_NFR010D_2003.nc
+│   │   ├── tn_comSPF_NFR010D_2004.nc
+│   │   ├── tn_comSPF_NFR010D_2005.nc
+│   │   ├── tn_comSPF_NFR010D_2006.nc
+│   │   ├── tn_comSPF_NFR010D_2007.nc
+│   │   ├── tn_comSPF_NFR010D_2008.nc
+│   │   ├── tn_comSPF_NFR010D_2009.nc
+│   │   ├── tn_comSPF_NFR010D_2010.nc
+│   │   ├── tn_comSPF_NFR010D_2011.nc
+│   │   ├── tn_comSPF_NFR010D_2012.nc
+│   │   ├── tn_comSPF_NFR010D_2013.nc
+│   │   ├── tn_comSPF_NFR010D_2014.nc
+│   │   ├── tn_comSPF_NFR010D_2015.nc
+│   │   ├── tn_comSPF_NFR010D_2016.nc
+│   │   ├── tn_comSPF_NFR010D_2017.nc
+│   │   ├── tn_comSPF_NFR010D_2018.nc
+│   │   ├── tn_comSPF_NFR010D_2019.nc
+│   │   ├── tn_comSPF_NFR010D_2020.nc
+│   │   ├── tn_comSPF_NFR010D_2021.nc
+│   │   ├── tn_comSPF_NFR010D_2022.nc
+│   │   ├── tx_comSPF_NFR010D_2000.nc
+│   │   ├── tx_comSPF_NFR010D_2001.nc
+│   │   ├── tx_comSPF_NFR010D_2002.nc
+│   │   ├── tx_comSPF_NFR010D_2003.nc
+│   │   ├── tx_comSPF_NFR010D_2004.nc
+│   │   ├── tx_comSPF_NFR010D_2005.nc
+│   │   ├── tx_comSPF_NFR010D_2006.nc
+│   │   ├── tx_comSPF_NFR010D_2007.nc
+│   │   ├── tx_comSPF_NFR010D_2008.nc
+│   │   ├── tx_comSPF_NFR010D_2009.nc
+│   │   ├── tx_comSPF_NFR010D_2010.nc
+│   │   ├── tx_comSPF_NFR010D_2011.nc
+│   │   ├── tx_comSPF_NFR010D_2012.nc
+│   │   ├── tx_comSPF_NFR010D_2013.nc
+│   │   ├── tx_comSPF_NFR010D_2014.nc
+│   │   ├── tx_comSPF_NFR010D_2015.nc
+│   │   ├── tx_comSPF_NFR010D_2016.nc
+│   │   ├── tx_comSPF_NFR010D_2017.nc
+│   │   ├── tx_comSPF_NFR010D_2018.nc
+│   │   ├── tx_comSPF_NFR010D_2019.nc
+│   │   ├── tx_comSPF_NFR010D_2020.nc
+│   │   ├── tx_comSPF_NFR010D_2021.nc
+│   │   └── tx_comSPF_NFR010D_2022.nc
+│   ├── NFR010D.parquet
+│   ├── old
+│   │   ├── exposure_tn_65+_abs.csv
+│   │   ├── exposure_tn_65-_abs.csv
+│   │   ├── exposure_tn_65+_rel.csv
+│   │   ├── exposure_tn_65-_rel.csv
+│   │   ├── exposure_tn_classes_65+_abs.csv
+│   │   ├── exposure_tn_classes_65-_abs.csv
+│   │   ├── exposure_tropnight_65+_abs.csv
+│   │   ├── exposure_tropnight_65-_abs.csv
+│   │   ├── exposure_tropnight_65+_rel.csv
+│   │   ├── exposure_tropnight_65-_rel.csv
+│   │   ├── exposure_tropnight_classes_65+_abs.csv
+│   │   ├── exposure_tropnight_classes_65-_abs.csv
+│   │   ├── exposure_tropnight_dates_65+_abs.csv
+│   │   └── exposure_tropnight_dates_65-_abs.csv
+│   ├── pop_sexe_age_communes_1990.xlsx
+│   ├── pop_sexe_age_communes_2018.xlsx
+│   ├── pop-sexe-age-quinquennal6822.xlsx
+│   └── trop_commune_year.parquet
+├── decoupage_IPR.py
+├── decoupage_IPR.R
+├── essai_1.qmd
+├── essai_permut.R
+├── essai_shapley2.R
+├── essai_shapley3.R
+├── essai_shapley.R
+├── essai_waterfall_lea.qmd
+├── GPE_2_1.Rmd
+├── GPE_revision.Rmd
+├── harmo_pop.py
+├── harmo_pop.R
+├── LICENSE
+├── open_shapefile.py
+├── outputs
+│   ├── essai.png
+│   ├── par_canicule
+│   │   ├── canicule_2003_10.png
+│   │   ├── canicule_2003_11.png
+│   │   ├── canicule_2003_12.png
+│   │   ├── canicule_2003_3.png
+│   │   ├── canicule_2003_4.png
+│   │   ├── canicule_2003_5.png
+│   │   ├── canicule_2003_6.png
+│   │   ├── canicule_2003_7.png
+│   │   ├── canicule_2003_8.png
+│   │   ├── canicule_2003_9.png
+│   │   ├── canicule_2017_10.png
+│   │   ├── canicule_2017_11.png
+│   │   ├── canicule_2017_12.png
+│   │   ├── canicule_2017_3.png
+│   │   ├── canicule_2017_4.png
+│   │   ├── canicule_2017_5.png
+│   │   ├── canicule_2017_6.png
+│   │   ├── canicule_2017_7.png
+│   │   ├── canicule_2017_8.png
+│   │   ├── canicule_2017_9.png
+│   │   ├── canicule_2018_10.png
+│   │   ├── canicule_2018_11.png
+│   │   ├── canicule_2018_12.png
+│   │   ├── canicule_2018_3.png
+│   │   ├── canicule_2018_4.png
+│   │   ├── canicule_2018_5.png
+│   │   ├── canicule_2018_6.png
+│   │   ├── canicule_2018_7.png
+│   │   ├── canicule_2018_8.png
+│   │   ├── canicule_2018_9.png
+│   │   ├── canicule_2019_10.png
+│   │   ├── canicule_2019_11.png
+│   │   ├── canicule_2019_12.png
+│   │   ├── canicule_2019_3.png
+│   │   ├── canicule_2019_4.png
+│   │   ├── canicule_2019_5.png
+│   │   ├── canicule_2019_6.png
+│   │   ├── canicule_2019_7.png
+│   │   ├── canicule_2019_8.png
+│   │   ├── canicule_2019_9.png
+│   │   ├── canicule_2020_10.png
+│   │   ├── canicule_2020_11.png
+│   │   ├── canicule_2020_12.png
+│   │   ├── canicule_2020_3.png
+│   │   ├── canicule_2020_4.png
+│   │   ├── canicule_2020_5.png
+│   │   ├── canicule_2020_6.png
+│   │   ├── canicule_2020_7.png
+│   │   ├── canicule_2020_8.png
+│   │   ├── canicule_2020_9.png
+│   │   ├── canicule_2022_10.png
+│   │   ├── canicule_2022_11.png
+│   │   ├── canicule_2022_12.png
+│   │   ├── canicule_2022_3.png
+│   │   ├── canicule_2022_4.png
+│   │   ├── canicule_2022_5.png
+│   │   ├── canicule_2022_6.png
+│   │   ├── canicule_2022_7.png
+│   │   ├── canicule_2022_8.png
+│   │   ├── canicule_2022_9.png
+│   │   ├── distrib_canicule_2003_10.png
+│   │   ├── distrib_canicule_2003_11.png
+│   │   ├── distrib_canicule_2003_12.png
+│   │   ├── distrib_canicule_2003_3.png
+│   │   ├── distrib_canicule_2003_4.png
+│   │   ├── distrib_canicule_2003_5.png
+│   │   ├── distrib_canicule_2003_6.png
+│   │   ├── distrib_canicule_2003_7.png
+│   │   ├── distrib_canicule_2003_8.png
+│   │   ├── distrib_canicule_2003_9.png
+│   │   ├── distrib_canicule_2017_10.png
+│   │   ├── distrib_canicule_2017_11.png
+│   │   ├── distrib_canicule_2017_12.png
+│   │   ├── distrib_canicule_2017_3.png
+│   │   ├── distrib_canicule_2017_4.png
+│   │   ├── distrib_canicule_2017_5.png
+│   │   ├── distrib_canicule_2017_6.png
+│   │   ├── distrib_canicule_2017_7.png
+│   │   ├── distrib_canicule_2017_8.png
+│   │   ├── distrib_canicule_2017_9.png
+│   │   ├── distrib_canicule_2018_10.png
+│   │   ├── distrib_canicule_2018_11.png
+│   │   ├── distrib_canicule_2018_12.png
+│   │   ├── distrib_canicule_2018_3.png
+│   │   ├── distrib_canicule_2018_4.png
+│   │   ├── distrib_canicule_2018_5.png
+│   │   ├── distrib_canicule_2018_6.png
+│   │   ├── distrib_canicule_2018_7.png
+│   │   ├── distrib_canicule_2018_8.png
+│   │   ├── distrib_canicule_2018_9.png
+│   │   ├── distrib_canicule_2019_10.png
+│   │   ├── distrib_canicule_2019_11.png
+│   │   ├── distrib_canicule_2019_12.png
+│   │   ├── distrib_canicule_2019_3.png
+│   │   ├── distrib_canicule_2019_4.png
+│   │   ├── distrib_canicule_2019_5.png
+│   │   ├── distrib_canicule_2019_6.png
+│   │   ├── distrib_canicule_2019_7.png
+│   │   ├── distrib_canicule_2019_8.png
+│   │   ├── distrib_canicule_2019_9.png
+│   │   ├── distrib_canicule_2020_10.png
+│   │   ├── distrib_canicule_2020_11.png
+│   │   ├── distrib_canicule_2020_12.png
+│   │   ├── distrib_canicule_2020_3.png
+│   │   ├── distrib_canicule_2020_4.png
+│   │   ├── distrib_canicule_2020_5.png
+│   │   ├── distrib_canicule_2020_6.png
+│   │   ├── distrib_canicule_2020_7.png
+│   │   ├── distrib_canicule_2020_8.png
+│   │   ├── distrib_canicule_2020_9.png
+│   │   ├── distrib_canicule_2022_10.png
+│   │   ├── distrib_canicule_2022_11.png
+│   │   ├── distrib_canicule_2022_12.png
+│   │   ├── distrib_canicule_2022_3.png
+│   │   ├── distrib_canicule_2022_4.png
+│   │   ├── distrib_canicule_2022_5.png
+│   │   ├── distrib_canicule_2022_6.png
+│   │   ├── distrib_canicule_2022_7.png
+│   │   ├── distrib_canicule_2022_8.png
+│   │   ├── distrib_canicule_2022_9.png
+│   │   └── summary.png
+│   ├── par_canicule_25
+│   │   ├── canicule_2017_3.png
+│   │   ├── canicule_2018_3.png
+│   │   ├── canicule_2019_3.png
+│   │   ├── canicule_2020_3.png
+│   │   ├── canicule_2022_3.png
+│   │   ├── distrib_canicule_2017_3.png
+│   │   ├── distrib_canicule_2018_3.png
+│   │   ├── distrib_canicule_2019_3.png
+│   │   ├── distrib_canicule_2020_3.png
+│   │   └── distrib_canicule_2022_3.png
+│   ├── par_canicule_consecutive
+│   │   ├── canicule_2003_3.png
+│   │   ├── canicule_2003_4.png
+│   │   ├── canicule_2003_5.png
+│   │   ├── canicule_2003_6.png
+│   │   ├── canicule_2017_3.png
+│   │   ├── canicule_2017_4.png
+│   │   ├── canicule_2017_5.png
+│   │   ├── canicule_2017_6.png
+│   │   ├── canicule_2017_7.png
+│   │   ├── canicule_2018_3.png
+│   │   ├── canicule_2018_4.png
+│   │   ├── canicule_2018_5.png
+│   │   ├── canicule_2018_6.png
+│   │   ├── canicule_2018_7.png
+│   │   ├── canicule_2019_3.png
+│   │   ├── canicule_2019_4.png
+│   │   ├── canicule_2019_5.png
+│   │   ├── canicule_2019_6.png
+│   │   ├── canicule_2019_7.png
+│   │   ├── canicule_2020_3.png
+│   │   ├── canicule_2020_4.png
+│   │   ├── canicule_2020_5.png
+│   │   ├── canicule_2020_6.png
+│   │   ├── canicule_2020_7.png
+│   │   ├── canicule_2022_3.png
+│   │   ├── canicule_2022_4.png
+│   │   ├── canicule_2022_5.png
+│   │   ├── canicule_2022_6.png
+│   │   ├── canicule_2022_7.png
+│   │   ├── distrib_canicule_2003_3.png
+│   │   ├── distrib_canicule_2003_4.png
+│   │   ├── distrib_canicule_2003_5.png
+│   │   ├── distrib_canicule_2003_6.png
+│   │   ├── distrib_canicule_2017_3.png
+│   │   ├── distrib_canicule_2017_4.png
+│   │   ├── distrib_canicule_2017_5.png
+│   │   ├── distrib_canicule_2017_6.png
+│   │   ├── distrib_canicule_2017_7.png
+│   │   ├── distrib_canicule_2018_3.png
+│   │   ├── distrib_canicule_2018_4.png
+│   │   ├── distrib_canicule_2018_5.png
+│   │   ├── distrib_canicule_2018_6.png
+│   │   ├── distrib_canicule_2018_7.png
+│   │   ├── distrib_canicule_2019_3.png
+│   │   ├── distrib_canicule_2019_4.png
+│   │   ├── distrib_canicule_2019_5.png
+│   │   ├── distrib_canicule_2019_6.png
+│   │   ├── distrib_canicule_2019_7.png
+│   │   ├── distrib_canicule_2020_3.png
+│   │   ├── distrib_canicule_2020_4.png
+│   │   ├── distrib_canicule_2020_5.png
+│   │   ├── distrib_canicule_2020_6.png
+│   │   ├── distrib_canicule_2020_7.png
+│   │   ├── distrib_canicule_2022_3.png
+│   │   ├── distrib_canicule_2022_4.png
+│   │   ├── distrib_canicule_2022_5.png
+│   │   ├── distrib_canicule_2022_6.png
+│   │   ├── distrib_canicule_2022_7.png
+│   │   └── summary.png
+│   ├── par_canicule.zip
+│   ├── shapley_3_10 trop_nights.png
+│   ├── shapley_3_12 trop_nights.png
+│   ├── shapley_3_6 trop_nights.png
+│   ├── shapley_4_12 trop_nights.png
+│   ├── shapley_4_6 trop_nights.png
+│   ├── shapley_5_10 trop_nights.png
+│   ├── shapley_5_6 trop_nights.png
+│   ├── shapley_5_9 trop_nights.png
+│   ├── shapley_distrib_3_10 trop_nights.png
+│   ├── shapley_distrib_3_12 trop_nights.png
+│   ├── shapley_distrib_3_6 trop_nights.png
+│   ├── shapley_distrib_4_12 trop_nights.png
+│   ├── shapley_distrib_4_6 trop_nights.png
+│   ├── shapley_distrib_5_10 trop_nights.png
+│   ├── shapley_distrib_5_6 trop_nights.png
+│   ├── shapley_distrib_5_9 trop_nights.png
+│   ├── tn_65_age
+│   │   ├── ordre0.png
+│   │   ├── ordre1.png
+│   │   ├── ordre2.png
+│   │   ├── ordre3.png
+│   │   ├── ordre4.png
+│   │   ├── ordre5.png
+│   │   └── ordre6.png
+│   ├── tropical_nights_12.png
+│   ├── tropical_nights_65.png
+│   └── tropical_nights_6.png
+├── script_lea.R
+└── tree.txt
+
+12 directories, 416 files
