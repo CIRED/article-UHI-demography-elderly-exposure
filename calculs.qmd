@@ -1,0 +1,355 @@
+---
+title: "calculs"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(ncdf4)
+library(stars)   
+library(purrr)
+library(dplyr)
+library(readxl)
+library(arrow)
+```
+
+# maps
+
+```{r}
+shapefile_init <- st_read("./data/Communes/COMMUNE_SPF.shp") 
+st_crs(shapefile_init) <- 3857
+
+
+shapefile <- shapefile_init%>%
+  filter(INSEE_REG == "11") %>%
+  st_transform(4326)
+```
+
+# t night
+
+```{r}
+# files <- list.files("./data/NFR010D/",
+#                     pattern = "^tn",
+#                     full.names = TRUE)
+# NFR010D <- map_dfr(files, ~ read_ncdf(.x) %>% as.data.frame())
+# 
+# files <- list.files("./data/NFR010C/",
+#                     pattern = "^tn",
+#                     full.names = TRUE)
+# NFR010C <- map_dfr(files, ~ read_ncdf(.x) %>% as.data.frame())
+
+# write_parquet(NFR010C,"./data/NFR010C.parquet")
+# write_parquet(NFR010D,"./data/NFR010D.parquet")
+
+NFR010C <- read_parquet("./data/NFR010C.parquet")
+NFR010D <- read_parquet("./data/NFR010D.parquet")
+```
+
+# populations
+
+```{r}
+
+df2 <- read_excel("./data/pop_sexe_age_communes_1990.xlsx") %>% 
+  na.omit() #sinon ca rajoute plein de ligne vides avec des NA, qui posent pb ensuite
+df3 <- read_excel("./data/pop_sexe_age_communes_2018.xlsx") %>% 
+  na.omit()
+
+sum_cols <- function(df, cols) {
+  df %>%
+    mutate(val = rowSums(select(., all_of(cols)), na.rm = TRUE)) %>%
+    pull(val)
+}
+
+dic_age_df2 <- list(
+  "65-H" = c("ageq_rec01s1rpop1990","ageq_rec02s1rpop1990","ageq_rec03s1rpop1990",
+             "ageq_rec04s1rpop1990","ageq_rec05s1rpop1990","ageq_rec06s1rpop1990",
+             "ageq_rec07s1rpop1990","ageq_rec08s1rpop1990","ageq_rec09s1rpop1990",
+             "ageq_rec10s1rpop1990","ageq_rec11s1rpop1990","ageq_rec12s1rpop1990",
+             "ageq_rec13s1rpop1990"),
+  "65+H" = c("ageq_rec14s1rpop1990","ageq_rec15s1rpop1990","ageq_rec16s1rpop1990",
+             "ageq_rec17s1rpop1990","ageq_rec18s1rpop1990","ageq_rec19s1rpop1990",
+             "ageq_rec20s1rpop1990"),
+  "65-F" = c("ageq_rec01s2rpop1990","ageq_rec02s2rpop1990","ageq_rec03s2rpop1990",
+             "ageq_rec04s2rpop1990","ageq_rec05s2rpop1990","ageq_rec06s2rpop1990",
+             "ageq_rec07s2rpop1990","ageq_rec08s2rpop1990","ageq_rec09s2rpop1990",
+             "ageq_rec10s2rpop1990","ageq_rec11s2rpop1990","ageq_rec12s2rpop1990",
+             "ageq_rec13s2rpop1990"),
+  "65+F" = c("ageq_rec14s2rpop1990","ageq_rec15s2rpop1990","ageq_rec16s2rpop1990",
+             "ageq_rec17s2rpop1990","ageq_rec18s2rpop1990","ageq_rec19s2rpop1990",
+             "ageq_rec20s2rpop1990")
+)
+
+for (name in names(dic_age_df2)) {
+  df2[[name]] <- sum_cols(df2, dic_age_df2[[name]])
+}
+
+df2 <- df2 %>%
+  mutate(
+    `65+` = `65+H` + `65+F`,
+    `65-` = `65-H` + `65-F`
+  )
+
+# Harmonisation communes
+com_equi <- read_csv("./data/corresp.csv")
+
+for (i in com_equi$old_code) {
+  target <- com_equi %>% filter(old_code == i) %>% pull(new_code)
+  
+  df2[df2$INSEE == target, c("65+","65-","65+H","65+F","65-H","65-F")] <-
+    df2[df2$INSEE == target, c("65+","65-","65+H","65+F","65-H","65-F")] +
+    df2[df2$INSEE == i, c("65+","65-","65+H","65+F","65-H","65-F")]
+  
+  df2 <- df2 %>% filter(INSEE != i)
+}
+
+df2 <- df2 %>%
+  mutate(popTOT = `65+` + `65-`)
+
+
+dic_age_df3 <- list(
+  "65+H" = c("SEXE1_AGEPYR1065","SEXE1_AGEPYR1080"),
+  		
+  "65+F" = c("SEXE2_AGEPYR1065","SEXE2_AGEPYR1080"),
+  "65-H" = c("SEXE1_AGEPYR1000","SEXE1_AGEPYR1003","SEXE1_AGEPYR1006","SEXE1_AGEPYR1011","SEXE1_AGEPYR1018","SEXE1_AGEPYR1025","SEXE1_AGEPYR1040","SEXE1_AGEPYR1055"),
+  "65-F" = c("SEXE2_AGEPYR1000","SEXE2_AGEPYR1003","SEXE2_AGEPYR1006","SEXE2_AGEPYR1011","SEXE2_AGEPYR1018","SEXE2_AGEPYR1025","SEXE2_AGEPYR1040","SEXE2_AGEPYR1055")
+)
+
+for (name in names(dic_age_df3)) {
+  df3[[name]] <- sum_cols(df3, dic_age_df3[[name]])
+}
+
+df3 <- df3 %>%
+  mutate(
+    `65+` = `65+H` + `65+F`,
+    `65-` = `65-H` + `65-F`
+  ) %>% 
+  mutate(popTOT = `65+` + `65-`)
+
+
+# fractions
+df2 <- df2 %>%
+  mutate(frac_age = `65+` / popTOT)
+
+df3 <- df3 %>%
+  mutate(frac_age = `65+` / popTOT)
+
+# df2 <- df2 %>%
+#   mutate(
+#     `65+_inv` = popTOT * df3$frac_age_18,
+#     `65-_inv` = popTOT * (1 - df3$frac_age_18)
+#   )
+# 
+# df3 <- df3 %>%
+#   mutate(
+#     `65+_inv` = popTOT * df2$frac_age_90,
+#     `65-_inv` = popTOT * (1 - df2$frac_age_90)
+#   )
+
+df2_join <- df2 %>% 
+  select(INSEE,`65-H`,`65+H`,`65-F`,`65+F`,`65+`,`65-`,`popTOT`,`frac_age`) %>% 
+  rename_with( ~paste0(.,"_90"), 2:9)
+
+df3_join <- df3 %>% 
+  select(CODGEO,`65-H`,`65+H`,`65-F`,`65+F`,`65+`,`65-`,`popTOT`,`frac_age`) %>% 
+  rename_with( ~paste0(.,"_18"), 2:9) 
+  
+populations <- df2_join %>% 
+  left_join(df3_join,by = c("INSEE" = "CODGEO"))
+
+```
+
+## total pop
+```{r}
+pop_totale_1990 <- sum(populations$popTOT_90)
+pop_totale_2018 <- sum(populations$popTOT_18)
+
+pop_65_1990 <- sum(populations$`65+_90`)
+pop_65_2018 <- sum(populations$`65+_18`)
+
+```
+
+
+# tropical nights
+
+
+## consecutive days
+```{r}
+
+tmp <- NFR010D %>%
+  mutate(year = year(date)) %>%
+  filter(tn > 20) %>% 
+  group_by(year,COM) %>%
+  mutate(consecutive = c(NA,diff(date))==1) %>% 
+  filter(consecutive == TRUE) %>% 
+  mutate(consecutive2 = c(NA,diff(date))==1) 
+
+
+
+consecutive_nuit_trop_COM_NFR010D <- NFR010D %>%
+  arrange(COM, date) %>%
+  group_by(COM) %>%
+  mutate(
+    above20 = tn > 20,
+    period = cumsum(above20 != lag(above20, default = FALSE))
+  ) %>%
+  filter(above20) %>%
+  group_by(COM, period) %>%
+  summarise(
+    start_date = min(date),
+    end_date = max(date),
+    nb_nuit_trop_D = n(),
+    .groups = "drop"
+  ) %>% 
+  mutate(year = year(start_date)) %>% 
+  mutate(COM = as.character(COM))
+
+consecutive_nuit_trop_COM_NFR010C <- NFR010C %>%
+  arrange(COM, date) %>%
+  group_by(COM) %>%
+  mutate(
+    above20 = tn > 20,
+    period = cumsum(above20 != lag(above20, default = FALSE))
+  ) %>%
+  filter(above20) %>%
+  group_by(COM, period) %>%
+  summarise(
+    start_date = min(date),
+    end_date = max(date),
+    nb_nuit_trop_C = n(),
+    .groups = "drop"
+  ) %>% 
+  mutate(year = year(start_date)) %>% 
+  mutate(COM = as.character(COM))
+
+max_consecutive_nuit_trop_COM_NFR010D <- consecutive_nuit_trop_COM_NFR010D %>% 
+  group_by(COM,year) %>% 
+  summarise(nb_nuit_trop_D = max (nb_nuit_trop_D))
+
+max_consecutive_nuit_trop_COM_NFR010C <- consecutive_nuit_trop_COM_NFR010C %>% 
+  group_by(COM,year) %>% 
+  summarise(nb_nuit_trop_C = max (nb_nuit_trop_C))
+
+# result %>% 
+#   ggplot(aes(x=consecutive_days))+
+#   geom_histogram()
+# print(result)
+
+final_data_consecutive <- shapefile %>%
+  st_drop_geometry() %>% 
+  left_join(populations, by = c("INSEE_COM" = "INSEE")) %>% 
+  left_join(max_consecutive_nuit_trop_COM_NFR010D, by = c("INSEE_COM" = "COM"))%>% 
+  left_join(max_consecutive_nuit_trop_COM_NFR010C, by = c("INSEE_COM" = "COM","year" = "year")) %>% 
+  mutate(nb_nuit_trop_D = if_else(is.na(nb_nuit_trop_D),0,nb_nuit_trop_D),
+         nb_nuit_trop_C = if_else(is.na(nb_nuit_trop_C),0,nb_nuit_trop_C))
+
+
+write_parquet(final_data_consecutive,"./data/final_data_consecutive.parquet")
+
+```
+
+# final data
+
+```{r}
+
+nuit_trop_COM_NFR010D <- NFR010D %>%
+  mutate(year = year(date)) %>%
+  group_by(year,COM) %>%
+  summarise(nb_nuit_trop_D = sum(tn > 20, na.rm = TRUE),
+            nb_nuit_trop_D_25 = sum(tn > 25, na.rm = TRUE),
+            nb_nuit_trop_D_32 = sum(tn > 32, na.rm = TRUE)) %>% 
+  mutate(COM = as.character(COM))
+
+nuit_trop_COM_NFR010C <- NFR010C %>%
+  mutate(year = year(date)) %>%
+  group_by(year,COM) %>%
+  summarise(nb_nuit_trop_C = sum(tn > 20, na.rm = TRUE),
+            nb_nuit_trop_C_25 = sum(tn > 25, na.rm = TRUE),
+            nb_nuit_trop_C_32 = sum(tn > 32, na.rm = TRUE)) %>% 
+  mutate(COM = as.character(COM))
+
+
+
+
+shapefile2 <- shapefile %>%
+  left_join(populations, by = c("INSEE_COM" = "INSEE")) %>% 
+  left_join(nuit_trop_COM_NFR010D, by = c("INSEE_COM" = "COM"))%>% 
+  left_join(nuit_trop_COM_NFR010C, by = c("INSEE_COM" = "COM","year" = "year")) 
+
+font <- "arial" 
+
+tmp <- shapefile2 %>%
+  filter(year %in% (2002:2022)) %>% 
+  group_by(geometry) %>% 
+  summarise(nb_nuit_trop = (sum(nb_nuit_trop_D) - sum(nb_nuit_trop_C) ) ) 
+
+# tmp %>% 
+#   ggplot(aes(fill=nb_nuit_trop))+
+#   geom_sf()+
+#    xlab('') + ylab('') + labs(fill="")+
+#     theme(panel.background = element_rect(fill = "white"),#"aliceblue"
+#           plot.margin=unit(c(0,0,0,0),"mm"))+
+#     #ggtitle("Change in consumption losses when opening trade")+#,subtitle= "from “Low trade” to “High trade” scenario\n2050 SSP2 and 2045-2055 warming level" )+
+#   scale_fill_distiller(palette="PuOr",
+#                         limits = c(-max(abs(tmp$nb_nuit_trop)), max(abs(tmp$nb_nuit_trop))),
+#                         #labels = scales::percent,
+#                         direction=-1)+
+#   # scale_fill_gradientn(colours=brewer.pal(7,"YlGn"))+
+#   #scale_fill_viridis(direction=1)+
+#     #labs(fill = "Cross-border\nclimate exposure (%)")+
+#   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+#         legend.position = "bottom",
+#         legend.direction = "horizontal",
+#         legend.title = ggplot2::element_text(family = font, size = 22, color = "#222222"),
+#         legend.text = ggplot2::element_text(family = font, size = 22, color = "#222222"),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank(),
+#         plot.title = ggplot2::element_text(family = font, size = 28, face = "bold", color = "#222222"), 
+#         plot.subtitle = ggplot2::element_text(family = font, size = 22, margin = ggplot2::margin(9, 0, 9, 0)),
+#         #legend.position = c(0.12, 0.3)
+#         )+
+#     guides(
+#     fill = guide_colorbar(
+#       title.position = "bottom",   # title above the bar
+#       title.hjust = 0.5,         # center the title (optional)
+#       barwidth = unit(0.5, "npc"),   # key trick: relative width
+#       barheight = unit(0.5, "cm"),
+#     ))
+plot(tmp)
+
+write_parquet(shapefile2 %>% st_drop_geometry(),"./data/final_data.parquet")
+
+final_data <- read_parquet("./data/final_data.parquet")
+```
+
+# fichier pour waterfall
+
+```{r}
+trop_commune_year <- final_data %>% 
+  mutate(seuil_18 = nb_nuit_trop_D >10,
+         seuil_90 = nb_nuit_trop_C > 10) %>% 
+  group_by(year,INSEE_COM) %>% 
+  summarise(
+    LULC90_POP90 = sum( `65+_90` * seuil_90 ),
+    LULC90_POP18 = sum( `65+_18` * seuil_90 ),
+    LULC18_POP90 = sum( `65+_90` * seuil_18 ),
+    LULC18_POP18 = sum( `65+_18` * seuil_18 )
+  )
+
+write_parquet(trop_commune_year,"./data/trop_commune_year.parquet")
+
+trop_commune_year2 <- trop_commune_year %>% 
+  pivot_longer(cols=-c(year,INSEE_COM)) %>% 
+  separate_wider_delim(cols = name,delim="_",names = c("LULC","POP")) %>% 
+  separate_wider_position(LULC,widths = c( 4,LULC = 2)) %>% 
+  separate_wider_position(POP,widths = c( 3,POP = 2)) 
+```
+
+## analyse des classes
+
+```{r}
+shapefile2 %>% 
+  st_drop_geometry() 
+```
+
+

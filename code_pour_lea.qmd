@@ -1,0 +1,643 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=FALSE,echo = FALSE,warning = FALSE, message=FALSE)
+
+library(tidyverse)
+library(readxl)
+library(readr)
+library(pacman)
+library(shadowtext)
+library(ggrepel)
+library(sf)
+library("rnaturalearth")
+library("rnaturalearthdata")
+library(viridis)
+library(metR)
+library(ggnewscale)
+library(maps)
+library(RColorBrewer)
+library(forcats)
+  library("rnaturalearthdata")
+  library(raster)
+  library("sf")
+  library(stringr)
+  library(cowplot)
+  library(dbplyr)
+  library(dplyr)
+  library(grid) # for unit
+  library(gridExtra) # for grid.arrange
+  libs <- c("rgdal", "maptools", "gridExtra")
+  library(knitr)
+  library(kableExtra)
+  library(shadowtext)
+  library(ggrepel)
+    library(arrow)
+  set.seed(42)
+  lapply(libs, require, character.only = TRUE)
+  library(ggExtra)
+  library(scales)
+  library(waterfalls)
+library(directlabels)
+library(forcats)
+  library(slider)
+  library(gtools)
+library(purrr)
+
+# install.packages('devtools')
+#devtools::install_github('bbc/bbplot')
+library('bbplot')
+  
+#install.packages("ggmagnify", repos = c("https://hughjonesd.r-universe.dev", 
+#                 "https://cloud.r-project.org"))
+
+pacman::p_load('dplyr', 'tidyr', 'gapminder',
+               'ggplot2',  'ggalt',
+               'forcats', 'R.utils', 'png', 
+               'grid', 'ggpubr', 'scales',
+               'bbplot', 'ggalluvial','ggforce','ggmagnify','RNetCDF')
+
+
+SAVE_ici<-TRUE
+SAVE_ici_bis<-FALSE
+
+```
+
+# chargement données
+
+```{r load data}
+
+exposure_tn_65_plus_abs<-read_delim("./data/exposure_tn_classes_65+_abs.csv",delim=";") %>% 
+  rename ("temperature" = "...1") 
+
+exposure_tn_65_plus_new <- exposure_tn_65_plus_abs %>% 
+  pivot_longer(cols=-c(temperature)) %>% 
+  separate_wider_delim(cols = name,delim="_",names = c("LULC","POP","AGE")) %>% 
+  filter(!grepl("REP",AGE)) %>% 
+  separate_wider_position(LULC,widths = c( 4,LULC = 2)) %>% 
+  separate_wider_position(POP,widths = c( 3,POP = 2)) %>% 
+  separate_wider_position(AGE,widths = c( 3,AGE = 2))
+
+
+exposure_tropnight_classe_65_plus<-read_delim("./data/exposure_tropnight_classes_65+_abs.csv",delim=";") %>% 
+  rename ("temperature" = "...1")
+
+exposure_tropnight_classe_65_plus_new <- exposure_tropnight_classe_65_plus %>% 
+  pivot_longer(cols=-c(temperature)) %>% 
+  separate_wider_delim(cols = name,delim="_",names = c("LULC","POP","AGE")) %>% 
+  filter(!grepl("REP",AGE)) %>% 
+  separate_wider_position(LULC,widths = c( 4,LULC = 2)) %>% 
+  separate_wider_position(POP,widths = c( 3,POP = 2)) %>% 
+  separate_wider_position(AGE,widths = c( 3,AGE = 2))
+
+
+```
+
+# fonctions
+
+## calcule les permutations
+
+```{r}
+compute_permut <- function(df,vars = c("LULC", "AGE", "POP"),start_val = 90, end_val = 18)
+{
+  # =========================
+# VALUE FUNCTION
+# =========================
+
+get_value <- function(state) {
+  
+  conds <- Map(function(var) {
+    df[[var]] == state[[var]]
+  }, vars)
+  
+  rows <- Reduce(`&`, conds)
+  
+  val <- df$value[rows]
+  
+  if (length(val) != 1) {
+    stop("State not uniquely matched")
+  }
+  
+  return(val)
+}
+
+# =========================
+# ALL PERMUTATIONS
+# =========================
+k <- length(vars)
+perms <- permutations(k, k, vars)
+
+# =========================
+# PATH DECOMPOSITION
+# =========================
+decompose_path <- function(order) {
+  
+  state <- setNames(rep(start_val, k), vars)
+  prev <- get_value(state)
+  
+  out <- list()
+  
+  for (i in seq_along(order)) {
+    
+    var <- order[i]
+    state[var] <- end_val
+    
+    new <- get_value(state)
+    
+    out[[i]] <- data.frame(
+      permutation = paste(order, collapse = "→"),
+      variable = var,
+      contribution = new - prev
+    )
+    
+    prev <- new
+  }
+  
+  bind_rows(out)
+}
+
+# =========================
+# ALL PERMUTATION CONTRIBUTIONS
+# =========================
+perm_df <- bind_rows(lapply(1:nrow(perms), function(i) {
+  decompose_path(perms[i, ])
+}))
+
+
+perm_df <- map_dfr(1:nrow(perms), ~ decompose_path(perms[.x, ]))
+
+
+return(perm_df)
+
+#write.csv(perm_df, "permutation_contributions.csv", row.names = FALSE)
+#write.csv(shapley_df, "shapley_values.csv", row.names = FALSE)
+}
+```
+
+
+## trace le waterfall graph
+
+```{r}
+
+
+draw_waterfall <- function(shapley_df,df,vars = c("LULC", "AGE", "POP"),start_val = 90, end_val = 18,title ="Change in population exposed to heat",subtitle = "Thousands of people, age 65+, Tn > 15°C",put_rect_text_outside_when_value_below = 27)
+{
+  # =========================
+# VALUE FUNCTION
+# =========================
+
+get_value <- function(state) {
+  
+  conds <- Map(function(var) {
+    df[[var]] == state[[var]]
+  }, vars)
+  
+  rows <- Reduce(`&`, conds)
+  
+  val <- df$value[rows]
+  
+  if (length(val) != 1) {
+    stop("State not uniquely matched")
+  }
+  
+  return(val)
+}
+
+# =========================
+# ALL PERMUTATIONS
+# =========================
+k <- length(vars)
+
+# =========================
+# START / END VALUES
+# =========================
+v_start <- get_value(setNames(rep(start_val, k), vars))
+v_end   <- -get_value(setNames(rep(end_val, k), vars))
+
+
+wf <- data.frame(
+  step = c("1990", shapley_df$variable, "2018"),
+  value = c(v_start, shapley_df$shapley, v_end),
+  type = c("total", rep("change", k), "total")
+)
+
+
+levels <- wf$step
+
+# =========================
+# SETUP for graph
+# =========================
+data1 <- wf  %>%
+    mutate(step = factor(step, levels = levels),
+        ymin = round(cumsum(value),  length(vars)),
+        ymax = lag(cumsum(value), default = 0),
+        xmin = c(head(step, -1), NA),
+        xmax = c(tail(step, -1), NA),
+        Impact = ifelse(step %in% c(as.character(wf$step[1]), as.character(wf$step[nrow(wf)])),"Budget",
+                        ifelse(value > 0, "Increase", "Decrease")
+           )) %>% 
+  mutate(ymin=ymin/1000,
+         ymax = ymax /1000) %>% 
+  mutate(step2 = as.factor(case_when(
+        step == "LULC" ~ "UHI variation",
+        step == "AGE" ~ "change in\npopulation age",
+        step == "POP" ~ "change in\npopulation\nlocation",
+        step == "REP" ~ "change in\ntotal population",
+        step == "REP_age" ~ "change in\npopulation age",
+        TRUE ~ step)))
+
+# =========================
+# WATERFALL PLOT
+# =========================
+
+w <- 0.7  #use to set width of bars
+
+g <- data1 %>% 
+  mutate(label_ici = round(ymin-ymax)) %>% 
+  mutate(label_ici = if_else(step == "2018",-label_ici,label_ici)) %>% 
+  ggplot() +
+    geom_rect(aes(xmin = as.integer(step) - w/2,
+                  xmax = as.integer(step) + w/2, ymin = ymin, ymax = ymax,
+                  fill = Impact), colour = "black") +
+    scale_x_discrete(labels =data1$step2 ,limits = levels) +
+    scale_fill_manual(values = (c("Decrease" = "#FAAB18",  "Increase" = "#1380A1" , "Budget" = "black"))) +
+  geom_segment(data = data1[1:(nrow(data1) -1),],
+               aes(x = xmin,
+                   xend = xmax,
+                   y = ymin,
+                   yend = ymin),
+               linetype="dashed")+
+  geom_text(aes(x = as.integer(step) ,
+                y = if_else(abs(ymin-ymax)> put_rect_text_outside_when_value_below,
+                            ymin /2 + ymax /2,
+                            ymax - put_rect_text_outside_when_value_below), 
+                label = label_ici,
+                color = abs(ymin-ymax)< put_rect_text_outside_when_value_below #(Impact != "Budget")
+                                ),
+            size=7)+
+  scale_color_manual(values = c("white","black"))+
+  bbc_style()+
+   theme(legend.position = "none",
+         axis.text.x = element_text(angle=0,size=16),) +
+    ggtitle(title,
+          subtitle = subtitle)+
+  geom_hline(yintercept =0)
+
+return(g)
+
+#write.csv(perm_df, "permutation_contributions.csv", row.names = FALSE)
+#write.csv(shapley_df, "shapley_values.csv", row.names = FALSE)
+}
+
+```
+
+
+# tn 65 plus
+
+## 3 classes
+
+```{r}
+df <- exposure_tn_65_plus_new %>% 
+  filter(temperature == "[16;17[") %>% 
+  filter(AGE == POP) %>% 
+  dplyr::select(-AGE)
+
+#65+ 1990: 1 149 599
+#65+ 2018: 1 812 696
+# pop totale Idf 1990: 10 644 665
+# pop totale Idf 2018: 12 213 447
+
+
+
+df2<- df %>% 
+  mutate(REP = 90,
+         value=if_else(POP==18,value/1812696*1149599,value))
+
+df3 <- df %>% 
+  mutate(REP = 18, 
+         value=if_else(POP==90,value*1812696/1149599,value))
+
+df_tmp <- rbind(df2,df3)
+
+
+perm_df <- compute_permut(df_tmp,vars = c("REP",  "POP","LULC"),start_val = 90, end_val = 18) #"AGE",
+
+shapley_df <- perm_df %>%
+  group_by(variable) %>%
+  summarise(
+    shapley = mean(contribution),
+    .groups = "drop"
+  )
+
+g <- draw_waterfall(shapley_df,df_tmp,vars = c("REP",  "POP","LULC"),start_val = 90, end_val = 18)
+g
+
+perm_df %>% 
+    mutate(variable = as.factor(case_when(
+        variable == "LULC" ~ "UHI variation",
+        variable == "AGE" ~ "change in\npopulation age",
+        variable == "POP" ~ "change in\npopulation location",
+        variable == "REP" ~ "change in\ntotal population",
+        variable == "REP_age" ~ "change in\npopulation age",
+        TRUE ~ variable))) %>% 
+  ggplot(aes(x=variable,y=contribution))+
+  geom_jitter(alpha=0.7,fill="#1380A1",color="#1380A1",size=3)+
+  geom_boxplot(alpha=0.,outlier.shape = NA)+
+    bbc_style()+
+   theme(legend.position = "none",
+         axis.text.x = element_text(angle=0,size=16),) +
+    ggtitle("Influence of each variable,\nfor all permutations",
+          subtitle = "Thousands of people, age 65+, Tn > 15°C")+
+  geom_hline(yintercept =0)
+```
+
+## 4 classes
+
+```{r}
+df <- exposure_tn_65_plus_new %>% 
+  filter(temperature == "[16;17[") %>% 
+  filter(AGE == POP) %>% 
+  dplyr::select(-AGE)
+
+#65+ 1990: 1149599
+#65+ 2018: 1812696
+# pop totale Idf 1990: 10644665
+# pop totale Idf 2018: 12213447
+
+ratio_65_1990 = 1149599/10644665 
+ratio_65_2018 = 1812696/12213447 
+
+df2<- df %>% 
+  mutate(REP = 90,
+         value=if_else(POP==18,value/12213447*10644665,value))
+
+df3 <- df %>% 
+  mutate(REP = 18, 
+         value=if_else(POP==90,value*12213447/10644665,value))
+
+df_tmp <- rbind(df2,df3)
+
+df2<- df_tmp %>% 
+  mutate(REP_age = 90,
+         value=if_else(POP==18,value*ratio_65_1990/ratio_65_2018,value))
+
+df3 <- df_tmp %>% 
+  mutate(REP_age = 18, 
+         value=if_else(POP==90,value*ratio_65_2018/ratio_65_1990,value))
+
+df_tmp <- rbind(df2,df3) %>% 
+  dplyr::select("REP","REP_age" ,"POP" ,"LULC","value")
+
+perm_df <- compute_permut(df_tmp,vars = c("REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18) #"AGE",
+
+shapley_df <- perm_df %>%
+  group_by(variable) %>%
+  summarise(
+    shapley = mean(contribution),
+    .groups = "drop"
+  )
+
+g <- draw_waterfall(shapley_df,df_tmp,vars = c("REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18)
+g
+
+perm_df %>% 
+  ggplot(aes(x=variable,y=contribution))+
+  geom_jitter()
+```
+
+# 12 tropical night classes
+
+## 3 categories
+
+```{r}
+
+df <- exposure_tropnight_classe_65_plus_new %>% 
+  filter(temperature == "[12;14[") %>% 
+  filter(AGE == POP) %>% 
+  dplyr::select(-AGE)
+
+#65+ 1990: 1 149 599
+#65+ 2018: 1 812 696
+# pop totale Idf 1990: 10 644 665
+# pop totale Idf 2018: 12 213 447
+
+
+
+df2<- df %>% 
+  mutate(REP = 90,
+         value=if_else(POP==18,value/1812696*1149599,value))
+
+df3 <- df %>% 
+  mutate(REP = 18, 
+         value=if_else(POP==90,value*1812696/1149599,value))
+
+df_tmp <- rbind(df2,df3)
+
+
+perm_df <- compute_permut(df_tmp,vars = c("REP",  "POP","LULC"),start_val = 90, end_val = 18) #"AGE",
+
+shapley_df <- perm_df %>%
+  group_by(variable) %>%
+  summarise(
+    shapley = mean(contribution),
+    .groups = "drop"
+  )
+
+g <- draw_waterfall(shapley_df,df_tmp,vars = c("REP",  "POP","LULC"),start_val = 90, end_val = 18,title = "Number of people exposed\nto more than 12 tropical nights",  subtitle = "Thousands of people, age 65+, Tn > 15°C")
+g
+
+h <- perm_df %>% 
+    mutate(variable = as.factor(case_when(
+        variable == "LULC" ~ "UHI variation",
+        variable == "AGE" ~ "change in\npopulation age",
+        variable == "POP" ~ "change in\npopulation location",
+        variable == "REP" ~ "change in\ntotal population",
+        variable == "REP_age" ~ "change in\npopulation age",
+        TRUE ~ variable))) %>% 
+  ggplot(aes(x=variable,y=contribution/1000))+
+  geom_jitter(alpha=0.7,fill="#1380A1",color="#1380A1",size=3)+
+  #geom_boxplot(alpha=0.,outlier.shape = NA)+
+    bbc_style()+
+   theme(legend.position = "none",
+         axis.text.x = element_text(angle=0,size=16),) +
+    ggtitle("Influence of each variable, for all permutations",
+          subtitle = "Thousands of people, age 65+, exposed to more than\n12 tropical nights")+
+  geom_hline(yintercept =0)
+
+
+ggsave(paste0("./outputs/shapley_3_12 trop_nights.png"),plot=g,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+
+ggsave(paste0("./outputs/shapley_distrib_3_12 trop_nights.png"),plot=h,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+```
+
+## 4 categories
+
+```{r}
+
+df <- exposure_tropnight_classe_65_plus_new %>% 
+  filter(temperature == "[12;14[") %>% 
+  filter(AGE == POP) %>% 
+  dplyr::select(-AGE)
+
+ratio_65_1990 = 1149599/10644665 
+ratio_65_2018 = 1812696/12213447 
+
+df2<- df %>% 
+  mutate(REP = 90,
+         value=if_else(POP==18,value/12213447*10644665,value))
+
+df3 <- df %>% 
+  mutate(REP = 18, 
+         value=if_else(POP==90,value*12213447/10644665,value))
+
+df_tmp <- rbind(df2,df3)
+
+df2<- df_tmp %>% 
+  mutate(REP_age = 90,
+         value=if_else(POP==18,value*ratio_65_1990/ratio_65_2018,value))
+
+df3 <- df_tmp %>% 
+  mutate(REP_age = 18, 
+         value=if_else(POP==90,value*ratio_65_2018/ratio_65_1990,value))
+
+df_tmp <- rbind(df2,df3) %>% 
+  dplyr::select("REP","REP_age" ,"POP" ,"LULC","value")
+
+perm_df <- compute_permut(df_tmp,vars = c("REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18) #"AGE",
+
+shapley_df <- perm_df %>%
+  group_by(variable) %>%
+  summarise(
+    shapley = mean(contribution),
+    .groups = "drop"
+  ) %>% 
+  mutate(ordre=factor(variable,levels = c("REP","REP_age", "POP","LULC")))
+
+
+g <- draw_waterfall(shapley_df,df_tmp,vars = c("REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18,title = "Number of people exposed to more than\n12 tropical nights",  subtitle = "Thousands of people, age 65+, Tn > 15°C",put_rect_text_outside_when_value_below = 20)
+g
+
+h <- perm_df %>% 
+    mutate(variable = as.factor(case_when(
+        variable == "LULC" ~ "UHI variation",
+        variable == "AGE" ~ "change in\npopulation age",
+        variable == "POP" ~ "change in\npopulation location",
+        variable == "REP" ~ "change in\ntotal population",
+        variable == "REP_age" ~ "change in\npopulation age",
+        TRUE ~ variable))) %>% 
+  ggplot(aes(x=variable,y=contribution/1000))+
+  geom_jitter(alpha=0.7,fill="#1380A1",color="#1380A1",size=3)+
+  #geom_boxplot(alpha=0.,outlier.shape = NA)+
+    bbc_style()+
+   theme(legend.position = "none",
+         axis.text.x = element_text(angle=0,size=16),) +
+    ggtitle("Influence of each variable, for all permutations",
+          subtitle = "Thousands of people, age 65+, exposed to more than\n12 tropical nights")+
+  geom_hline(yintercept =0)
+
+
+ggsave(paste0("./outputs/shapley_4_12 trop_nights.png"),plot=g,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+
+ggsave(paste0("./outputs/shapley_distrib_4_12 trop_nights.png"),plot=h,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+
+```
+
+# 6 tropical nights
+
+## 4 categories
+
+```{r}
+
+df <- exposure_tropnight_classe_65_plus_new %>% 
+  filter(temperature  %in% c("[12;14[","[10;12[","[8;10[","[6;8["))%>% 
+  #filter(temperature  %in% c("[12;14[")) %>% 
+  dplyr::select(-temperature) %>% 
+  group_by(LULC,POP,AGE ) %>% 
+  summarise(value=sum(value)) %>% 
+  filter(AGE == POP) %>% 
+  dplyr::select(-AGE)
+
+ratio_65_1990 = 1149599/10644665 
+ratio_65_2018 = 1812696/12213447 
+
+df2<- df %>% 
+  mutate(REP = 90,
+         value=if_else(POP==18,value/12213447*10644665,value))
+
+df3 <- df %>% 
+  mutate(REP = 18, 
+         value=if_else(POP==90,value*12213447/10644665,value))
+
+df_tmp <- rbind(df2,df3)
+
+df2<- df_tmp %>% 
+  mutate(REP_age = 90,
+         value=if_else(POP==18,value*ratio_65_1990/ratio_65_2018,value))
+
+df3 <- df_tmp %>% 
+  mutate(REP_age = 18, 
+         value=if_else(POP==90,value*ratio_65_2018/ratio_65_1990,value))
+
+df_tmp <- rbind(df2,df3) %>% 
+  dplyr::select("REP","REP_age" ,"POP" ,"LULC","value")
+
+perm_df <- compute_permut(df_tmp,vars = c("REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18) #"AGE",
+
+shapley_df <- perm_df %>%
+  group_by(variable) %>%
+  summarise(
+    shapley = mean(contribution),
+    .groups = "drop"
+  ) %>% 
+  mutate(ordre=factor(variable,levels = c("REP","REP_age", "POP","LULC")))
+
+
+g <- draw_waterfall(shapley_df,df_tmp,vars = c("REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18,title = "Number of people exposed to more than\n6 tropical nights",  subtitle = "Thousands of people, age 65+, Tn > 15°C",put_rect_text_outside_when_value_below = 20)
+g
+
+h <- perm_df %>% 
+    mutate(variable = as.factor(case_when(
+        variable == "LULC" ~ "UHI variation",
+        variable == "AGE" ~ "change in\npopulation age",
+        variable == "POP" ~ "change in\npopulation location",
+        variable == "REP" ~ "change in\ntotal population",
+        variable == "REP_age" ~ "change in\npopulation age",
+        TRUE ~ variable))) %>% 
+  ggplot(aes(x=variable,y=contribution/1000))+
+  geom_jitter(alpha=0.7,fill="#1380A1",color="#1380A1",size=3)+
+  #geom_boxplot(alpha=0.,outlier.shape = NA)+
+    bbc_style()+
+   theme(legend.position = "none",
+         axis.text.x = element_text(angle=0,size=16),) +
+    ggtitle("Influence of each variable, for all permutations",
+          subtitle = "Thousands of people, age 65+, exposed to more than\n6 tropical nights")+
+  geom_hline(yintercept =0)
+
+
+ggsave(paste0("./outputs/shapley_4_6 trop_nights.png"),plot=g,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+
+ggsave(paste0("./outputs/shapley_distrib_4_6 trop_nights.png"),plot=h,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+
+```
