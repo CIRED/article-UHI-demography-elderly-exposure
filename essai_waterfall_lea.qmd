@@ -130,6 +130,79 @@ final_data_consecutive <- read_parquet("./data/final_data_consecutive.parquet")
 draw_ici <- TRUE
 ```
 
+# histogramme
+## cumulative graph
+```{r}
+
+
+# Reshape to long format
+df_long <- final_data %>%
+  filter(year %in% c(2017,2018,2019,2020,2022)) %>% 
+  dplyr::select(`65+_90`,`65+_18`,nb_nuit_trop_C,nb_nuit_trop_D,year,INSEE_COM) %>% 
+  rename("pop_1990" = "65+_90",
+         "pop_2018" = "65+_18",
+         "hot_days_1990" = "nb_nuit_trop_C",
+         "hot_days_2018" = "nb_nuit_trop_D") %>% 
+  pivot_longer(
+    cols = c(pop_1990, pop_2018, hot_days_1990, hot_days_2018),
+    names_to = c(".value", "scenario"),
+    names_pattern = "(.+)_(1990|2018)"
+  ) %>%
+  rename(population = pop, hot_days = hot_days) %>%
+  mutate(scenario = paste("If population and land use\nwere as in", scenario))
+
+# For each hot_days threshold, compute cumulative population exceeding it
+hot_day_vals <- sort(unique(df_long$hot_days))
+
+cumulative_df <- df_long %>%
+  group_by(scenario,year) %>%
+  reframe(
+    hot_days_threshold = hot_day_vals,
+    cum_pop = sapply(hot_day_vals, function(x) {
+      sum(population[hot_days >= x])
+    })
+  )
+
+cumulative_df %>% filter(hot_days_threshold ==1)
+cumulative_df %>% filter(hot_days_threshold ==11) %>% 
+  pivot_wider(names_from = scenario, values_from = cum_pop) %>% 
+  mutate(ratio = `If population and land use\nwere as in 2018`/`If population and land use\nwere as in 1990`)
+
+# Plot
+p <- ggplot(cumulative_df, aes(x = hot_days_threshold, y = cum_pop / 1e6, color = scenario, fill = scenario)) +
+  geom_step(linewidth = 1) +
+  labs(
+    title = "Cumulative population aged  65 years and over\nexposed to at least X tropical nights",
+    x = "Number of tropical nights (threshold)",
+    y = "Cumulative population (millions)",
+    color = "",
+    fill = ""
+  ) +
+  geom_hline(yintercept=0)+
+  geom_vline(xintercept=0)+
+  facet_wrap(~ year) +
+  bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"),
+    axis.ticks.length =  unit(0.26, "cm"),
+    legend.position = "top", 
+    legend.justification = "left",
+    #axis.ticks.x = element_line(colour = "#333333"), 
+    #axis.ticks.length =  unit(0.26, "cm"),
+    axis.title = element_text(angle=0,size=16),
+    panel.grid.major.x = element_line(color="#cbcbcb"), 
+  )
+p
+  # theme_minimal(base_size = 18) +
+  # theme(legend.position = "top")
+
+ggsave(paste0("./outputs/par_canicule/cumulative.png"),plot=p,
+       width = 2666/250,
+       height= 1875/250,
+       unit="in")
+```
+
+
 # waterfall tn 65 +
 
 ## AGE
@@ -1112,7 +1185,7 @@ v_end   <- -get_value(setNames(rep(end_val, k), vars))
 
 
 wf <- data.frame(
-  step = c("1990", shapley_df$variable, "2018"),
+  step = c("If population\nand land use\nas in 1990", shapley_df$variable, "If population\nand land use\nas in 2018"),
   value = c(v_start, shapley_df$shapley, v_end),
   type = c("total", rep("change", k), "total")
 )
@@ -1135,12 +1208,18 @@ data1 <- wf  %>%
   mutate(ymin=ymin/1000,
          ymax = ymax /1000) %>% 
   mutate(step2 = as.factor(case_when(
-        step == "LULC" ~ "impact of\nland-use change\non urban climate",
-        step == "year" ~ "climate change",
-        step == "AGE" ~ "change in\npopulation age",
-        step == "POP" ~ "change in\npopulation\nlocation",
-        step == "REP" ~ "change in\ntotal population\nnumber",
-        step == "REP_age" ~ "change in\npopulation age",
+          # step == "LULC" ~ "impact of\nland-use change\non urban climate",
+          # step == "year" ~ "climate change",
+          # step == "AGE" ~ "change in the ratio\nof people aged 65+\nin the population",
+          # step == "POP" ~ "change in the\nlocation of people\naged 65+ within\nthe region",
+          # step == "REP" ~ "global population\nincrease in the\nregion",
+          # step == "REP_age" ~ "change in the ratio\nof people aged 65+\nin the population",
+          step == "LULC" ~ "Land-use change\n(urban\nclimate)",
+          step == "year" ~ "Climate change",
+          step == "AGE" ~ "Change in the ratio\nof people aged 65+\nin the population",
+          step == "POP" ~ "Location of\npeople aged 65+\nwithin the region",
+          step == "REP" ~ "Total population\nincrease",
+          step == "REP_age" ~ "Population\nage structure",
         TRUE ~ step)))
 
 # =========================
@@ -1151,7 +1230,7 @@ w <- 0.7  #use to set width of bars
 
 g <- data1 %>% 
   mutate(label_ici = round(ymin-ymax)) %>% 
-  mutate(label_ici = if_else(step == "2018",-label_ici,label_ici)) %>% 
+  mutate(label_ici = if_else(step == "If population\nand land use\nas in 2018",-label_ici,label_ici)) %>% 
   ggplot() +
     geom_rect(aes(xmin = as.integer(step) - w/2,
                   xmax = as.integer(step) + w/2, ymin = ymin, ymax = ymax,
@@ -2895,15 +2974,16 @@ h
 # analyse par canicule 
 
 ## tropical nights
+### calcul et graphes détaillés
 
 ```{r, warnings=False }
 
 memoire_df <- data_frame()
 
-for (year_ici in c(2003,2017,2018,2019,2020,2022))
+for (year_ici in c(2017,2018,2019,2020,2022))
 {
   
-  for (seuil in seq(3,12))
+  for (seuil in c(10)) #seq(3,12))
   {
     
     
@@ -2973,12 +3053,21 @@ for (year_ici in c(2003,2017,2018,2019,2020,2022))
       ) %>% 
       mutate(ordre=factor(variable,levels = c("REP","REP_age", "POP","LULC")))
     
+    min_max <- perm_df %>% 
+      group_by(variable) %>% 
+      summarise(mini = min(contribution),
+                maxi = max(contribution),
+                quant75 = quantile(contribution,probs = 0.75),
+                quant25 = quantile(contribution,probs = 0.25))
+    
     #variable qui stocke les resultats du shapley
     memoire_df <- shapley_df %>% 
       dplyr::select(-variable) %>% 
       mutate(year = year_ici,
              seuil = seuil) %>% 
-      rbind(memoire_df)
+      left_join(min_max,by = c("ordre" = "variable")) %>% 
+      rbind(memoire_df) 
+      
     
     if (draw_ici) 
     {
@@ -2987,12 +3076,18 @@ for (year_ici in c(2003,2017,2018,2019,2020,2022))
       
       h <- perm_df %>% 
         mutate(variable = as.factor(case_when(
-          variable == "LULC" ~ "impact of\nland-use change\non urban climate",
-          variable == "year" ~ "climate change",
-          variable == "AGE" ~ "change in\npopulation age",
-          variable == "POP" ~ "change in\npopulation location",
-          variable == "REP" ~ "change in\ntotal population",
-          variable == "REP_age" ~ "change in\npopulation age",
+          # variable == "LULC" ~ "impact of\nland-use change\non urban climate",
+          # variable == "year" ~ "climate change",
+          # variable == "AGE" ~ "change in the ratio\nof people aged 65+\nin the population",
+          # variable == "POP" ~ "change in the\nlocation of people\naged 65+ within\nthe region",
+          # variable == "REP" ~ "global population\nincrease in the\nregion",
+          # variable == "REP_age" ~ "change in the ratio\nof people aged 65+\nin the population",
+          variable == "LULC" ~ "Land-use change\n(urban\nclimate)",
+          variable == "year" ~ "Climate change",
+          variable == "AGE" ~ "Change in the ratio\nof people aged 65+\nin the population",
+          variable == "POP" ~ "Location of\npeople aged 65+\nwithin the region",
+          variable == "REP" ~ "Total population\nincrease",
+          variable == "REP_age" ~ "Population\nage structure",
           TRUE ~ variable))) %>% 
         ggplot(aes(x=variable,y=contribution/1000))+
         geom_jitter(alpha=0.7,fill="#1380A1",color="#1380A1",size=3)+
@@ -3019,33 +3114,41 @@ for (year_ici in c(2003,2017,2018,2019,2020,2022))
   }
 }
 
-write_parquet(memoire_df,"./data/memoire_df.parquet")
+#write_parquet(memoire_df,"./data/memoire_df.parquet")
 ```
 
-### test evolution des shapley
+### graphe résumé
 
 ```{r}
+
+memoire_df <- read_parquet("./data/memoire_df.parquet")
+
 g <- memoire_df %>% 
   mutate(ordre = case_when(
-    ordre == "LULC" ~ "impact of\nland-use change\non urban climate",
-    ordre == "year" ~ "climate change",
-    ordre == "AGE" ~ "change in\npopulation age",
-    ordre == "POP" ~ "change in\npopulation location",
-    ordre == "REP" ~ "change in\ntotal population",
-    ordre == "REP_age" ~ "change in\npopulation age",
+    ordre == "LULC" ~ "Land-use change\n(urban climate)",
+    ordre == "year" ~ "Climate change",
+    ordre == "AGE" ~ "Change in the ratio\nof people aged 65+\nin the population",
+    ordre == "POP" ~ "Location of\npeople aged 65+\nwithin the region",
+    ordre == "REP" ~ "Total population\nincrease",
+    ordre == "REP_age" ~ "Population\nage structure",
     TRUE ~ ordre)) %>% 
-  ggplot(aes(x=seuil,y=shapley,group=ordre,color=ordre))+
+  ggplot(aes(x=seuil,y=shapley,group=ordre,color=ordre,fill = ordre))+
   geom_line()+
+  geom_ribbon(aes(ymin = mini, ymax = maxi),
+              alpha = 0.3,
+              color = NA) +
   facet_wrap(~year)+
   geom_hline(yintercept = 0)+
   bbc_style()+
-  labs(x="number of tropical nights",y="contribution of each variable",color="")+
-  ggtitle("Evolution of the contribution of each variable",subtitle = "When changing the number of tropical nights")+
+  labs(x="Number of tropical nights",y="Change in number of people 65+\nexposed to persistent\ntropical-night exposure")+
+  ggtitle("Evolution of the contribution of each variable",
+          subtitle = "When changing the number of tropical nights")+
   theme(axis.ticks.x = element_line(colour = "#333333"),
-        axis.ticks.length =  unit(0.26, "cm"))+
+        axis.ticks.length =  unit(0.26, "cm"),
+        axis.title = ggplot2::element_text( size = 18, color = "#222222"))+
   scale_x_continuous(breaks = seq(3,12,))
 
-
+g
 ggsave(paste0("./outputs/par_canicule/summary.png"),plot=g,
        width = 2666/250,
        height= 1875/250,
@@ -3128,13 +3231,20 @@ for (seuil in seq(3,6))
       ) %>% 
       mutate(ordre=factor(variable,levels = c("REP","REP_age", "POP","LULC")))
     
+    min_max <- perm_df %>% 
+      group_by(variable) %>% 
+      summarise(mini = min(contribution),
+                maxi = max(contribution),
+                quant75 = quantile(contribution,probs = 0.75),
+                quant25 = quantile(contribution,probs = 0.25))
+    
     #variable qui stocke les resultats du shapley
-    memoire_df_consecutive <- shapley_df %>% 
+    memoire_df <- shapley_df %>% 
       dplyr::select(-variable) %>% 
       mutate(year = year_ici,
              seuil = seuil) %>% 
-      rbind(memoire_df_consecutive)
-    
+      left_join(min_max,by = c("ordre" = "variable")) %>% 
+      rbind(memoire_df) 
     
     if (draw_ici) 
     {
@@ -3190,12 +3300,15 @@ g <- memoire_df_consecutive %>%
     ordre == "REP_age" ~ "change in\npopulation age",
     TRUE ~ ordre)) %>% 
   ggplot(aes(x=seuil,y=shapley,group=ordre,color=ordre))+
-  geom_line()+
+  geom_ribbon(aes(ymin = mini, ymax = maxi),
+              alpha = 0.3,
+              color = NA) +
   facet_wrap(~year)+
   geom_hline(yintercept = 0)+
   bbc_style()+
-  labs(x="number of tropical nights",y="contribution of each variable",color="")+
-  ggtitle("Evolution of the contribution of each variable",subtitle = "When changing the number of tropical nights")+
+  labs(x="number of tropical nights",y="contribution of each variable")+
+  ggtitle("Evolution of the contribution of each variable",
+          subtitle = "When changing the number of tropical nights")+
   theme(axis.ticks.x = element_line(colour = "#333333"),
         axis.ticks.length =  unit(0.26, "cm"))+
   scale_x_continuous(breaks = seq(3,12,))

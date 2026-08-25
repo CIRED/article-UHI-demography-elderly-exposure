@@ -1,0 +1,257 @@
+---
+title: "calcul shapley"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(ncdf4)
+library(stars)   
+library(purrr)
+library(dplyr)
+library(readxl)
+library(arrow)
+
+# install.packages('devtools')
+#devtools::install_github('bbc/bbplot')
+library('bbplot')
+```
+
+# load data
+```{r}
+final_data <- read_parquet("./data/final_data.parquet")
+```
+
+### compute permut
+
+```{r}
+compute_permut <- function(df,vars = c("LULC", "AGE", "POP"),start_val = 90, end_val = 18)
+{
+  # =========================
+# VALUE FUNCTION
+# =========================
+
+get_value <- function(state) {
+  
+  conds <- Map(function(var) {
+    df[[var]] == state[[var]]
+  }, vars)
+  
+  rows <- Reduce(`&`, conds)
+  
+  val <- df$value[rows]
+  
+  if (length(val) != 1) {
+    stop("State not uniquely matched")
+  }
+  
+  return(val)
+}
+
+# =========================
+# ALL PERMUTATIONS
+# =========================
+k <- length(vars)
+perms <- permutations(k, k, vars)
+
+# =========================
+# PATH DECOMPOSITION
+# =========================
+decompose_path <- function(order) {
+  
+  state <- setNames(rep(start_val, k), vars)
+  prev <- get_value(state)
+  
+  out <- list()
+  
+  for (i in seq_along(order)) {
+    
+    var <- order[i]
+    state[var] <- end_val
+    
+    new <- get_value(state)
+    
+    out[[i]] <- data.frame(
+      permutation = paste(order, collapse = "→"),
+      variable = var,
+      contribution = new - prev
+    )
+    
+    prev <- new
+  }
+  
+  bind_rows(out)
+}
+
+# =========================
+# ALL PERMUTATION CONTRIBUTIONS
+# =========================
+perm_df <- bind_rows(lapply(1:nrow(perms), function(i) {
+  decompose_path(perms[i, ])
+}))
+
+
+perm_df <- map_dfr(1:nrow(perms), ~ decompose_path(perms[.x, ]))
+
+
+return(perm_df)
+
+#write.csv(perm_df, "permutation_contributions.csv", row.names = FALSE)
+#write.csv(shapley_df, "shapley_values.csv", row.names = FALSE)
+}
+```
+
+
+
+## tropical nights
+### calcul et graphes détaillés
+
+```{r, warnings=False }
+
+memoire_df_sensitivity <- data_frame()
+
+for (threshold_ici in c(18,19,21,22,25,32)) 
+{
+  for (year_ici in c(2017,2018,2019,2020,2022))
+  {
+    
+    for (seuil in seq(3,12))
+    {
+      
+      
+      tmp <- final_data %>% 
+        filter(year == year_ici) %>% 
+        dplyr::select(-c(nb_nuit_trop_D,nb_nuit_trop_C)) %>% 
+        rename( "nb_nuit_trop_D" = paste0("nb_nuit_trop_D_",threshold_ici) ,
+                "nb_nuit_trop_C" = paste0("nb_nuit_trop_C_",threshold_ici) )
+      
+      
+      df <- final_data %>% 
+        filter(year == year_ici) %>% 
+        dplyr::select(-c(nb_nuit_trop_D,nb_nuit_trop_C)) %>% 
+        rename( "nb_nuit_trop_D" = paste0("nb_nuit_trop_D_",threshold_ici),
+                "nb_nuit_trop_C" = paste0("nb_nuit_trop_C_",threshold_ici)) %>% 
+        mutate(seuil_18 = nb_nuit_trop_D > seuil,
+               seuil_90 = nb_nuit_trop_C > seuil) %>% 
+        group_by(year,INSEE_COM) %>% 
+        summarise(
+          LULC90_POP90 = sum( `65+_90` * seuil_90 ),
+          LULC90_POP18 = sum( `65+_18` * seuil_90 ),
+          LULC18_POP90 = sum( `65+_90` * seuil_18 ),
+          LULC18_POP18 = sum( `65+_18` * seuil_18 ),
+          .groups = "drop_last"
+        ) %>% 
+        pivot_longer(cols=-c(year,INSEE_COM)) %>% 
+        separate_wider_delim(cols = name,delim="_",names = c("LULC","POP")) %>% 
+        separate_wider_position(LULC,widths = c( 4,LULC = 2)) %>% 
+        separate_wider_position(POP,widths = c( 3,POP = 2)) %>% 
+        group_by(,LULC,POP) %>% 
+        summarise(value=sum(value),.groups = "drop_last")
+      
+      pop_totale_tmp <- final_data %>% 
+        filter(year == 2020) %>% #peu importe, c'est juste pour ne garder qu'une année
+        ungroup() %>% 
+        summarise(
+          pop_totale_1990 = sum(popTOT_90),
+          pop_totale_2018 = sum(popTOT_18),
+          pop_65_1990 = sum(`65+_90`),
+          pop_65_2018 = sum(`65+_18`),
+        )
+      
+      ratio_65_1990 = pop_totale_tmp$pop_65_1990/pop_totale_tmp$pop_totale_1990 
+      ratio_65_2018 = pop_totale_tmp$pop_65_2018/pop_totale_tmp$pop_totale_2018 
+      
+      df2<- df %>% 
+        mutate(REP = 90,
+               value=if_else(POP==18,value * pop_totale_tmp$pop_totale_1990/pop_totale_tmp$pop_totale_2018,value))
+      
+      df3 <- df %>% 
+        mutate(REP = 18, 
+               value=if_else(POP==90,value * pop_totale_tmp$pop_totale_2018/pop_totale_tmp$pop_totale_1990,value))
+      
+      df_tmp <- rbind(df2,df3)
+      
+      df2<- df_tmp %>% 
+        mutate(REP_age = 90,
+               value=if_else(POP==18,value*ratio_65_1990/ratio_65_2018,value))
+      
+      df3 <- df_tmp %>% 
+        mutate(REP_age = 18, 
+               value=if_else(POP==90,value*ratio_65_2018/ratio_65_1990,value))
+      
+      df_tmp <- rbind(df2,df3) %>% 
+        dplyr::select("REP","REP_age" ,"POP" ,"LULC","value") 
+      
+      perm_df <- compute_permut(df_tmp,vars = c(  "REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18) #"AGE",
+      
+      shapley_df <- perm_df %>%
+        group_by(variable) %>%
+        summarise(
+          shapley = mean(contribution),
+          .groups = "drop"
+        ) %>% 
+        mutate(ordre=factor(variable,levels = c("REP","REP_age", "POP","LULC")))
+      
+      min_max <- perm_df %>% 
+        group_by(variable) %>% 
+        summarise(mini = min(contribution),
+                  maxi = max(contribution),
+                  quant75 = quantile(contribution,probs = 0.75),
+                  quant25 = quantile(contribution,probs = 0.25))
+      
+      #variable qui stocke les resultats du shapley
+      memoire_df_sensitivity <- shapley_df %>% 
+        dplyr::select(-variable) %>% 
+        mutate(year = year_ici,
+               seuil = seuil,
+               threshold = threshold_ici) %>% 
+        left_join(min_max,by = c("ordre" = "variable")) %>% 
+        rbind(memoire_df_sensitivity) 
+      
+    }
+  }
+}
+write_parquet(memoire_df_sensitivity,"./data/memoire_df_sensitivity.parquet")
+```
+
+### graphe résumé
+
+```{r}
+
+memoire_df_sensitivity <- read_parquet("./data/memoire_df_sensitivity.parquet")
+
+for (threshold_ici in c(18,19,21,22,25,32)) 
+{
+  g <- memoire_df_sensitivity %>% 
+    filter(threshold==threshold_ici) %>% 
+    mutate(ordre = case_when(
+      ordre == "LULC" ~ "impact of\nland-use change\non urban climate",
+      ordre == "year" ~ "climate change",
+      ordre == "AGE" ~ "change in\npopulation age",
+      ordre == "POP" ~ "change in\npopulation location",
+      ordre == "REP" ~ "change in\ntotal population",
+      ordre == "REP_age" ~ "change in\npopulation age",
+      TRUE ~ ordre)) %>% 
+    ggplot(aes(x=seuil,y=shapley,group=ordre,color=ordre,fill = ordre))+
+    geom_line()+
+    geom_ribbon(aes(ymin = mini, ymax = maxi),
+                alpha = 0.3,
+                color = NA) +
+    facet_wrap(~year)+
+    geom_hline(yintercept = 0)+
+    bbc_style()+
+    labs(x="number of tropical nights",y="contribution of each variable")+
+    ggtitle(paste0("Threshold = ",threshold_ici,"°C"),
+            subtitle = paste0("Contribution of each variable when changing the number of nights > ",threshold_ici,"°C"))+
+    theme(axis.ticks.x = element_line(colour = "#333333"),
+          axis.ticks.length =  unit(0.26, "cm"))+
+    scale_x_continuous(breaks = seq(3,12,))
+  
+  g
+  ggsave(paste0("./outputs/sensitivity/summary_",threshold_ici,".png"),plot=g,
+         width = 2666/250,
+         height= 1875/250,
+         unit="in")
+}
+```

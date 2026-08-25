@@ -12,6 +12,10 @@ library(purrr)
 library(dplyr)
 library(readxl)
 library(arrow)
+
+# install.packages('devtools')
+#devtools::install_github('bbc/bbplot')
+library('bbplot')
 ```
 
 # maps
@@ -26,7 +30,13 @@ shapefile <- shapefile_init%>%
   st_transform(4326)
 ```
 
-# t night
+
+
+
+# t night and day
+## night 
+### load data t night
+
 
 ```{r}
 # files <- list.files("./data/NFR010D/",
@@ -44,6 +54,154 @@ shapefile <- shapefile_init%>%
 
 NFR010C <- read_parquet("./data/NFR010C.parquet")
 NFR010D <- read_parquet("./data/NFR010D.parquet")
+```
+
+
+
+### graphe nombre de nuit par an climat
+
+
+```{r}
+p <- NFR010C %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tn = mean(tn)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+  filter(year %in% c(2017,2018,2019,2020,2022),
+         month %in% c(6,7,8,9)) %>% 
+  mutate(tn_bis = if_else(tn>=20,tn,20))%>% 
+  ggplot(aes(x=date,y=tn))+
+  geom_line()+
+  #geom_line(aes(y=tn_bis),color="red")+
+  geom_hline(aes(yintercept = 20),linetype = "dotted")+
+  facet_wrap(~year,scales = "free_x")+
+  bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"), 
+    axis.ticks.length =  unit(0.26, "cm"),
+  )+
+  ggtitle("Daily minimal temperatures in Paris (°C)")
+
+ggsave(paste0("./outputs/night_temp_paris.png"),plot=p,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+p
+
+p<- NFR010C %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tn = mean(tn)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+ # filter(year %in% c(2017,2018,2019,2020,2021,2022),
+#         month %in% c(6,7,8,9)) %>% 
+  filter(tn>=20)%>% 
+  group_by(year) %>%
+  summarise(nombre=n()) %>% 
+  ggplot(aes(x=year,y=nombre))+
+  geom_line()+
+  geom_point()+
+  geom_hline(yintercept = 0)+
+    bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"), 
+    axis.ticks.length =  unit(0.26, "cm"),
+  )+
+  ggtitle("Total number of tropical nights in Paris",subtitle = "Number of tropical nights (>20°C) per year")
+  
+ggsave(paste0("./outputs/number_trop_paris.png"),plot=p,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+
+p
+```
+
+## day
+### load data t day
+
+```{r}
+# files <- list.files("./data/NFR010D/",
+#                     pattern = "^tx",
+#                     full.names = TRUE)
+# NFR010D_day <- map_dfr(files, ~ read_ncdf(.x) %>% as.data.frame())
+# 
+# files <- list.files("./data/NFR010C/",
+#                     pattern = "^tx",
+#                     full.names = TRUE)
+# NFR010C_day <- map_dfr(files, ~ read_ncdf(.x) %>% as.data.frame())
+# 
+# write_parquet(NFR010C_day,"./data/NFR010C_day.parquet")
+# write_parquet(NFR010D_day,"./data/NFR010D_day.parquet")
+
+NFR010C_day <- read_parquet("./data/NFR010C_day.parquet")
+NFR010D_day <- read_parquet("./data/NFR010D_day.parquet")
+```
+
+### graphe nombre de nuit par an climat
+
+
+```{r}
+p <- NFR010C_day %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tx = mean(tx)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+  filter(year %in% c(2017,2018,2019,2020,2022),
+         month %in% c(6,7,8,9)) %>% 
+  ggplot(aes(x=date,y=tx))+
+  geom_line()+
+  #geom_line(aes(y=tn_bis),color="red")+
+  geom_hline(aes(yintercept = 35),linetype = "dotted")+
+  facet_wrap(~year,scales = "free_x")+
+  bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"), 
+    axis.ticks.length =  unit(0.26, "cm"),
+  )+
+  ggtitle("Daily maximal temperatures in Paris (°C)")
+
+# ggsave(paste0("./outputs/day_temp_paris.png"),plot=p,
+#        width = 2666/280,
+#        height= 1875/280,
+#        unit="in")
+p
+
+p<- NFR010C_day %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tx = mean(tx)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+ # filter(year %in% c(2017,2018,2019,2020,2021,2022),
+#         month %in% c(6,7,8,9)) %>% 
+  filter(tx>=35)%>% 
+  group_by(year) %>%
+  summarise(nombre=n()) %>% 
+  ggplot(aes(x=year,y=nombre))+
+  geom_line()+
+  geom_point()+
+  geom_hline(yintercept = 0)+
+    bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"), 
+    axis.ticks.length =  unit(0.26, "cm"),
+  )+
+  ggtitle("Total number of hot days in Paris",subtitle = "Number of hot days (>35°C) per year")
+  
+# ggsave(paste0("./outputs/number_trop_paris.png"),plot=p,
+#        width = 2666/280,
+#        height= 1875/280,
+#        unit="in")
+
+p
 ```
 
 # populations
@@ -248,7 +406,7 @@ write_parquet(final_data_consecutive,"./data/final_data_consecutive.parquet")
 
 ```
 
-# final data
+## final data
 
 ```{r}
 
@@ -256,6 +414,10 @@ nuit_trop_COM_NFR010D <- NFR010D %>%
   mutate(year = year(date)) %>%
   group_by(year,COM) %>%
   summarise(nb_nuit_trop_D = sum(tn > 20, na.rm = TRUE),
+            nb_nuit_trop_D_18 = sum(tn > 18, na.rm = TRUE),
+            nb_nuit_trop_D_19 = sum(tn > 19, na.rm = TRUE),
+            nb_nuit_trop_D_21 = sum(tn > 21, na.rm = TRUE),
+            nb_nuit_trop_D_22 = sum(tn > 22, na.rm = TRUE),
             nb_nuit_trop_D_25 = sum(tn > 25, na.rm = TRUE),
             nb_nuit_trop_D_32 = sum(tn > 32, na.rm = TRUE)) %>% 
   mutate(COM = as.character(COM))
@@ -264,6 +426,10 @@ nuit_trop_COM_NFR010C <- NFR010C %>%
   mutate(year = year(date)) %>%
   group_by(year,COM) %>%
   summarise(nb_nuit_trop_C = sum(tn > 20, na.rm = TRUE),
+            nb_nuit_trop_C_18 = sum(tn > 18, na.rm = TRUE),
+            nb_nuit_trop_C_19 = sum(tn > 19, na.rm = TRUE),
+            nb_nuit_trop_C_21 = sum(tn > 21, na.rm = TRUE),
+            nb_nuit_trop_C_22 = sum(tn > 22, na.rm = TRUE),
             nb_nuit_trop_C_25 = sum(tn > 25, na.rm = TRUE),
             nb_nuit_trop_C_32 = sum(tn > 32, na.rm = TRUE)) %>% 
   mutate(COM = as.character(COM))
