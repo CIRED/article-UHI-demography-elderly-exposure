@@ -62,16 +62,34 @@ NFR010D <- read_parquet("./data/NFR010D.parquet")
 
 
 ```{r}
-p <- NFR010C %>% 
+tmp <- NFR010C %>% 
   #filter(COM %in% seq(75101,75111)) #%>% 
   filter(COM %in% seq(75101,75120))%>% 
   group_by(date) %>%
   summarise(tn = mean(tn)) %>% 
   mutate(year = year(date),
          month = month (date)) %>%
-  filter(year %in% c(2017,2018,2019,2020,2022),
+  filter(year %in% c(2017,2018,2019,2020,2021,2022),
          month %in% c(6,7,8,9)) %>% 
-  mutate(tn_bis = if_else(tn>=20,tn,20))%>% 
+  mutate(tn_bis = if_else(tn>=20,tn,20))
+
+tmp2 <- NFR010C %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tn = mean(tn)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+ # filter(year %in% c(2017,2018,2019,2020,2021,2022),
+#         month %in% c(6,7,8,9)) %>% 
+  filter(tn>=20)%>% 
+  group_by(year) %>%
+  summarise(nombre=n()) 
+
+
+p <- tmp %>% 
+  left_join(tmp2,by = join_by(year == year) ) %>% 
+  mutate(year = paste0(year,"\n(",nombre," tropical nights)")) %>% 
   ggplot(aes(x=date,y=tn))+
   geom_line()+
   #geom_line(aes(y=tn_bis),color="red")+
@@ -85,8 +103,8 @@ p <- NFR010C %>%
   ggtitle("Daily minimal temperatures in Paris (°C)")
 
 ggsave(paste0("./outputs/night_temp_paris.png"),plot=p,
-       width = 2666/280,
-       height= 1875/280,
+       width = 2666/230,
+       height= 1875/230,
        unit="in")
 p
 
