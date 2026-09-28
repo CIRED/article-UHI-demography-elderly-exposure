@@ -121,8 +121,8 @@ p<- NFR010C %>%
   group_by(year) %>%
   summarise(nombre=n()) %>% 
   ggplot(aes(x=year,y=nombre))+
-  geom_line()+
-  geom_point()+
+  geom_col(fill= "#1380A1")+
+  #geom_point()+
   geom_hline(yintercept = 0)+
     bbc_style()+
   theme(
