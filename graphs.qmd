@@ -16,6 +16,7 @@ library(readxl)
 library(arrow)
 library(ggspatial)
 library(scales)
+library(gtools)
 
 # install.packages('devtools')
 #devtools::install_github('bbc/bbplot')
@@ -345,86 +346,6 @@ ggsave(paste0("./outputs/map_population_65_evolution.png"),plot=p,
 
 # Background functions to compute waterfall graphs
 
-### function which computes shapley values
-
-```{r}
-compute_permut <- function(df,vars = c("LULC", "AGE", "POP"),start_val = 90, end_val = 18)
-{
-  # =========================
-# VALUE FUNCTION
-# =========================
-
-get_value <- function(state) {
-  
-  conds <- Map(function(var) {
-    df[[var]] == state[[var]]
-  }, vars)
-  
-  rows <- Reduce(`&`, conds)
-  
-  val <- df$value[rows]
-  
-  if (length(val) != 1) {
-    stop("State not uniquely matched")
-  }
-  
-  return(val)
-}
-
-# =========================
-# ALL PERMUTATIONS
-# =========================
-k <- length(vars)
-perms <- permutations(k, k, vars)
-
-# =========================
-# PATH DECOMPOSITION
-# =========================
-decompose_path <- function(order) {
-  
-  state <- setNames(rep(start_val, k), vars)
-  prev <- get_value(state)
-  
-  out <- list()
-  
-  for (i in seq_along(order)) {
-    
-    var <- order[i]
-    state[var] <- end_val
-    
-    new <- get_value(state)
-    
-    out[[i]] <- data.frame(
-      permutation = paste(order, collapse = "→"),
-      variable = var,
-      contribution = new - prev
-    )
-    
-    prev <- new
-  }
-  
-  bind_rows(out)
-}
-
-# =========================
-# ALL PERMUTATION CONTRIBUTIONS
-# =========================
-perm_df <- bind_rows(lapply(1:nrow(perms), function(i) {
-  decompose_path(perms[i, ])
-}))
-
-
-perm_df <- map_dfr(1:nrow(perms), ~ decompose_path(perms[.x, ]))
-
-
-return(perm_df)
-
-#write.csv(perm_df, "permutation_contributions.csv", row.names = FALSE)
-#write.csv(shapley_df, "shapley_values.csv", row.names = FALSE)
-}
-```
-
-
 ### function which computes the waterfall graph
 
 ```{r}
@@ -549,6 +470,87 @@ return(g)
 
 ```
 
+### function which computes shapley values
+
+```{r}
+compute_permut <- function(df,vars = c("LULC", "AGE", "POP"),start_val = 90, end_val = 18)
+{
+  # =========================
+# VALUE FUNCTION
+# =========================
+
+get_value <- function(state) {
+  
+  conds <- Map(function(var) {
+    df[[var]] == state[[var]]
+  }, vars)
+  
+  rows <- Reduce(`&`, conds)
+  
+  val <- df$value[rows]
+  
+  if (length(val) != 1) {
+    stop("State not uniquely matched")
+  }
+  
+  return(val)
+}
+
+# =========================
+# ALL PERMUTATIONS
+# =========================
+k <- length(vars)
+perms <- permutations(k, k, vars)
+
+# =========================
+# PATH DECOMPOSITION
+# =========================
+decompose_path <- function(order) {
+  
+  state <- setNames(rep(start_val, k), vars)
+  prev <- get_value(state)
+  
+  out <- list()
+  
+  for (i in seq_along(order)) {
+    
+    var <- order[i]
+    state[var] <- end_val
+    
+    new <- get_value(state)
+    
+    out[[i]] <- data.frame(
+      permutation = paste(order, collapse = "→"),
+      variable = var,
+      contribution = new - prev
+    )
+    
+    prev <- new
+  }
+  
+  bind_rows(out)
+}
+
+# =========================
+# ALL PERMUTATION CONTRIBUTIONS
+# =========================
+perm_df <- bind_rows(lapply(1:nrow(perms), function(i) {
+  decompose_path(perms[i, ])
+}))
+
+
+perm_df <- map_dfr(1:nrow(perms), ~ decompose_path(perms[.x, ]))
+
+
+return(perm_df)
+
+#write.csv(perm_df, "permutation_contributions.csv", row.names = FALSE)
+#write.csv(shapley_df, "shapley_values.csv", row.names = FALSE)
+}
+```
+
+
+
 # results
 
 ## cumulative graph
@@ -629,13 +631,6 @@ Here, to change the temperature threshold, change the variables `nb_nuit_trop_C`
 
 ```{r, warnings=False }
 
-
-#memoire_df <- read_parquet("./data/memoire_df.parquet")
-# for (year_ici in c(2021))
-# {
-#   
-#   for (seuil in 10)
-#   { 
 
 memoire_df <- data_frame()
 for (year_ici in c(2017,2018,2019,2020,2021,2022))
