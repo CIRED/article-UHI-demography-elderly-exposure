@@ -1,0 +1,813 @@
+---
+title: "Graphs of the article"
+format: html
+---
+
+# libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=FALSE,echo = FALSE,warning = FALSE, message=FALSE)
+library(tidyverse)
+library(ncdf4)
+library(stars)   
+library(purrr)
+library(dplyr)
+library(readxl)
+library(arrow)
+library(ggspatial)
+library(scales)
+
+# install.packages('devtools')
+#devtools::install_github('bbc/bbplot')
+library('bbplot')
+```
+
+
+# load data
+
+## load data t night
+
+
+```{r}
+files <- list.files("./data/NFR010D/",
+                    pattern = "^tn",
+                    full.names = TRUE)
+NFR010D <- map_dfr(files, ~ read_ncdf(.x) %>% as.data.frame())
+
+files <- list.files("./data/NFR010C/",
+                    pattern = "^tn",
+                    full.names = TRUE)
+NFR010C <- map_dfr(files, ~ read_ncdf(.x) %>% as.data.frame())
+
+# write_parquet(NFR010C,"./data/NFR010C.parquet")
+# write_parquet(NFR010D,"./data/NFR010D.parquet")
+# 
+# NFR010C <- read_parquet("./data/NFR010C.parquet")
+# NFR010D <- read_parquet("./data/NFR010D.parquet")
+```
+
+
+
+
+## load population data
+
+
+```{r}
+
+df2 <- read_excel("./data/pop_sexe_age_communes_1990.xlsx") %>% 
+  na.omit() #sinon ca rajoute plein de ligne vides avec des NA, qui posent pb ensuite
+df3 <- read_excel("./data/pop_sexe_age_communes_2018.xlsx") %>% 
+  na.omit()
+
+sum_cols <- function(df, cols) {
+  df %>%
+    mutate(val = rowSums(select(., all_of(cols)), na.rm = TRUE)) %>%
+    pull(val)
+}
+
+dic_age_df2 <- list(
+  "65-H" = c("ageq_rec01s1rpop1990","ageq_rec02s1rpop1990","ageq_rec03s1rpop1990",
+             "ageq_rec04s1rpop1990","ageq_rec05s1rpop1990","ageq_rec06s1rpop1990",
+             "ageq_rec07s1rpop1990","ageq_rec08s1rpop1990","ageq_rec09s1rpop1990",
+             "ageq_rec10s1rpop1990","ageq_rec11s1rpop1990","ageq_rec12s1rpop1990",
+             "ageq_rec13s1rpop1990"),
+  "65+H" = c("ageq_rec14s1rpop1990","ageq_rec15s1rpop1990","ageq_rec16s1rpop1990",
+             "ageq_rec17s1rpop1990","ageq_rec18s1rpop1990","ageq_rec19s1rpop1990",
+             "ageq_rec20s1rpop1990"),
+  "65-F" = c("ageq_rec01s2rpop1990","ageq_rec02s2rpop1990","ageq_rec03s2rpop1990",
+             "ageq_rec04s2rpop1990","ageq_rec05s2rpop1990","ageq_rec06s2rpop1990",
+             "ageq_rec07s2rpop1990","ageq_rec08s2rpop1990","ageq_rec09s2rpop1990",
+             "ageq_rec10s2rpop1990","ageq_rec11s2rpop1990","ageq_rec12s2rpop1990",
+             "ageq_rec13s2rpop1990"),
+  "65+F" = c("ageq_rec14s2rpop1990","ageq_rec15s2rpop1990","ageq_rec16s2rpop1990",
+             "ageq_rec17s2rpop1990","ageq_rec18s2rpop1990","ageq_rec19s2rpop1990",
+             "ageq_rec20s2rpop1990")
+)
+
+for (name in names(dic_age_df2)) {
+  df2[[name]] <- sum_cols(df2, dic_age_df2[[name]])
+}
+
+df2 <- df2 %>%
+  mutate(
+    `65+` = `65+H` + `65+F`,
+    `65-` = `65-H` + `65-F`
+  )
+
+# Harmonisation communes
+com_equi <- read_csv("./data/corresp.csv")
+
+for (i in com_equi$old_code) {
+  target <- com_equi %>% filter(old_code == i) %>% pull(new_code)
+  
+  df2[df2$INSEE == target, c("65+","65-","65+H","65+F","65-H","65-F")] <-
+    df2[df2$INSEE == target, c("65+","65-","65+H","65+F","65-H","65-F")] +
+    df2[df2$INSEE == i, c("65+","65-","65+H","65+F","65-H","65-F")]
+  
+  df2 <- df2 %>% filter(INSEE != i)
+}
+
+df2 <- df2 %>%
+  mutate(popTOT = `65+` + `65-`)
+
+
+dic_age_df3 <- list(
+  "65+H" = c("SEXE1_AGEPYR1065","SEXE1_AGEPYR1080"),
+  		
+  "65+F" = c("SEXE2_AGEPYR1065","SEXE2_AGEPYR1080"),
+  "65-H" = c("SEXE1_AGEPYR1000","SEXE1_AGEPYR1003","SEXE1_AGEPYR1006","SEXE1_AGEPYR1011","SEXE1_AGEPYR1018","SEXE1_AGEPYR1025","SEXE1_AGEPYR1040","SEXE1_AGEPYR1055"),
+  "65-F" = c("SEXE2_AGEPYR1000","SEXE2_AGEPYR1003","SEXE2_AGEPYR1006","SEXE2_AGEPYR1011","SEXE2_AGEPYR1018","SEXE2_AGEPYR1025","SEXE2_AGEPYR1040","SEXE2_AGEPYR1055")
+)
+
+for (name in names(dic_age_df3)) {
+  df3[[name]] <- sum_cols(df3, dic_age_df3[[name]])
+}
+
+df3 <- df3 %>%
+  mutate(
+    `65+` = `65+H` + `65+F`,
+    `65-` = `65-H` + `65-F`
+  ) %>% 
+  mutate(popTOT = `65+` + `65-`)
+
+
+# fractions
+df2 <- df2 %>%
+  mutate(frac_age = `65+` / popTOT)
+
+df3 <- df3 %>%
+  mutate(frac_age = `65+` / popTOT)
+
+# df2 <- df2 %>%
+#   mutate(
+#     `65+_inv` = popTOT * df3$frac_age_18,
+#     `65-_inv` = popTOT * (1 - df3$frac_age_18)
+#   )
+# 
+# df3 <- df3 %>%
+#   mutate(
+#     `65+_inv` = popTOT * df2$frac_age_90,
+#     `65-_inv` = popTOT * (1 - df2$frac_age_90)
+#   )
+
+df2_join <- df2 %>% 
+  select(INSEE,`65-H`,`65+H`,`65-F`,`65+F`,`65+`,`65-`,`popTOT`,`frac_age`) %>% 
+  rename_with( ~paste0(.,"_90"), 2:9)
+
+df3_join <- df3 %>% 
+  select(CODGEO,`65-H`,`65+H`,`65-F`,`65+F`,`65+`,`65-`,`popTOT`,`frac_age`) %>% 
+  rename_with( ~paste0(.,"_18"), 2:9) 
+  
+populations <- df2_join %>% 
+  left_join(df3_join,by = c("INSEE" = "CODGEO"))
+
+```
+
+## compile all data
+
+```{r}
+
+nuit_trop_COM_NFR010D <- NFR010D %>%
+  mutate(year = year(date)) %>%
+  group_by(year,COM) %>%
+  summarise(nb_nuit_trop_D = sum(tn > 20, na.rm = TRUE),
+            nb_nuit_trop_D_18 = sum(tn > 18, na.rm = TRUE),
+            nb_nuit_trop_D_19 = sum(tn > 19, na.rm = TRUE),
+            nb_nuit_trop_D_21 = sum(tn > 21, na.rm = TRUE),
+            nb_nuit_trop_D_22 = sum(tn > 22, na.rm = TRUE),
+            nb_nuit_trop_D_25 = sum(tn > 25, na.rm = TRUE),
+            nb_nuit_trop_D_32 = sum(tn > 32, na.rm = TRUE)) %>% 
+  mutate(COM = as.character(COM))
+
+nuit_trop_COM_NFR010C <- NFR010C %>%
+  mutate(year = year(date)) %>%
+  group_by(year,COM) %>%
+  summarise(nb_nuit_trop_C = sum(tn > 20, na.rm = TRUE),
+            nb_nuit_trop_C_18 = sum(tn > 18, na.rm = TRUE),
+            nb_nuit_trop_C_19 = sum(tn > 19, na.rm = TRUE),
+            nb_nuit_trop_C_21 = sum(tn > 21, na.rm = TRUE),
+            nb_nuit_trop_C_22 = sum(tn > 22, na.rm = TRUE),
+            nb_nuit_trop_C_25 = sum(tn > 25, na.rm = TRUE),
+            nb_nuit_trop_C_32 = sum(tn > 32, na.rm = TRUE)) %>% 
+  mutate(COM = as.character(COM))
+
+
+
+
+shapefile2 <- shapefile %>%
+  left_join(populations, by = c("INSEE_COM" = "INSEE")) %>% 
+  left_join(nuit_trop_COM_NFR010D, by = c("INSEE_COM" = "COM"))%>% 
+  left_join(nuit_trop_COM_NFR010C, by = c("INSEE_COM" = "COM","year" = "year")) 
+
+font <- "arial" 
+
+tmp <- shapefile2 %>%
+  filter(year %in% (2002:2022)) %>% 
+  group_by(geometry) %>% 
+  summarise(nb_nuit_trop = (sum(nb_nuit_trop_D) - sum(nb_nuit_trop_C) ) ) 
+
+plot(tmp)
+
+write_parquet(shapefile2 %>% st_drop_geometry(),"./data/final_data.parquet")
+
+final_data <- read_parquet("./data/final_data.parquet")
+```
+
+
+# graphs of section methods
+
+## Number of tropical nights per year 
+```{r}
+p<- NFR010C %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tn = mean(tn)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+ # filter(year %in% c(2017,2018,2019,2020,2021,2022),
+#         month %in% c(6,7,8,9)) %>% 
+  filter(tn>=20)%>% 
+  group_by(year) %>%
+  summarise(nombre=n()) %>% 
+  ggplot(aes(x=year,y=nombre))+
+  geom_col(fill= "#1380A1")+
+  #geom_point()+
+  geom_hline(yintercept = 0)+
+    bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"), 
+    axis.ticks.length =  unit(0.26, "cm"),
+  )+
+  ggtitle("Total number of tropical nights in Paris",subtitle = "Number of tropical nights (>20°C) per year")
+  
+ggsave(paste0("./outputs/number_trop_paris.png"),plot=p,
+       width = 2666/280,
+       height= 1875/280,
+       unit="in")
+
+p
+```
+
+## Daily minimal temperatures in Paris
+
+
+```{r}
+tmp <- NFR010C %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tn = mean(tn)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+  filter(year %in% c(2017,2018,2019,2020,2021,2022),
+         month %in% c(6,7,8,9)) %>% 
+  mutate(tn_bis = if_else(tn>=20,tn,20))
+
+tmp2 <- NFR010C %>% 
+  #filter(COM %in% seq(75101,75111)) #%>% 
+  filter(COM %in% seq(75101,75120))%>% 
+  group_by(date) %>%
+  summarise(tn = mean(tn)) %>% 
+  mutate(year = year(date),
+         month = month (date)) %>%
+ # filter(year %in% c(2017,2018,2019,2020,2021,2022),
+#         month %in% c(6,7,8,9)) %>% 
+  filter(tn>=20)%>% 
+  group_by(year) %>%
+  summarise(nombre=n()) 
+
+
+p <- tmp %>% 
+  left_join(tmp2,by = join_by(year == year) ) %>% 
+  mutate(year = paste0(year,"\n(",nombre," tropical nights)")) %>% 
+  ggplot(aes(x=date,y=tn))+
+  geom_line()+
+  #geom_line(aes(y=tn_bis),color="red")+
+  geom_hline(aes(yintercept = 20),linetype = "dotted")+
+  facet_wrap(~year,scales = "free_x")+
+  bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"), 
+    axis.ticks.length =  unit(0.26, "cm"),
+  )+
+  ggtitle("Daily minimal temperatures in Paris (°C)")
+
+ggsave(paste0("./outputs/night_temp_paris.png"),plot=p,
+       width = 2666/230,
+       height= 1875/230,
+       unit="in")
+p
+```
+
+
+## map of evolution of population
+
+
+```{r}
+
+tmp <- final_data %>% 
+  filter(year %in% c(2019))
+
+tmp2 <- shapefile %>% 
+  dplyr::select (c(INSEE_COM,geometry)) %>% 
+  left_join(tmp,by =c("INSEE_COM" = "INSEE_COM") ) %>% 
+  mutate(diff= (`65+_18` - `65+_90`))
+  
+#st_write(tmp2, "commune_pour_carte.shp")
+
+
+p <- tmp2 %>% 
+  ggplot()+
+  geom_sf(aes(fill = diff),color="grey50",size=.2)+
+  scale_fill_distiller(palette = "PuOr",
+                       #limits = c(-max(abs(tmp2$diff)),max(abs(tmp2$diff))),
+                       limits = c(-10000,10000),
+                       breaks = c(-10000,-5000,0,5000,10000))+
+  #geom_sf(aes(fill = tn),lwd=0)+
+  bbc_style()+
+  annotation_scale(location = "bl", width_hint = 0.25) +
+  annotation_north_arrow(location = "br", which_north = "true", 
+                         #pad_x = unit(0.75, "in"), pad_y = unit(0.5, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "right")+
+  ggtitle("Variation in population aged 65+ in each Commune",subtitle = "Evolution between 1990 and 2018")
+
+p
+
+ggsave(paste0("./outputs/map_population_65_evolution.png"),plot=p,
+       width = 2666/280*1.5,
+       height= 1875/280,
+       unit="in")
+```
+
+# Background functions to compute waterfall graphs
+
+### function which computes shapley values
+
+```{r}
+compute_permut <- function(df,vars = c("LULC", "AGE", "POP"),start_val = 90, end_val = 18)
+{
+  # =========================
+# VALUE FUNCTION
+# =========================
+
+get_value <- function(state) {
+  
+  conds <- Map(function(var) {
+    df[[var]] == state[[var]]
+  }, vars)
+  
+  rows <- Reduce(`&`, conds)
+  
+  val <- df$value[rows]
+  
+  if (length(val) != 1) {
+    stop("State not uniquely matched")
+  }
+  
+  return(val)
+}
+
+# =========================
+# ALL PERMUTATIONS
+# =========================
+k <- length(vars)
+perms <- permutations(k, k, vars)
+
+# =========================
+# PATH DECOMPOSITION
+# =========================
+decompose_path <- function(order) {
+  
+  state <- setNames(rep(start_val, k), vars)
+  prev <- get_value(state)
+  
+  out <- list()
+  
+  for (i in seq_along(order)) {
+    
+    var <- order[i]
+    state[var] <- end_val
+    
+    new <- get_value(state)
+    
+    out[[i]] <- data.frame(
+      permutation = paste(order, collapse = "→"),
+      variable = var,
+      contribution = new - prev
+    )
+    
+    prev <- new
+  }
+  
+  bind_rows(out)
+}
+
+# =========================
+# ALL PERMUTATION CONTRIBUTIONS
+# =========================
+perm_df <- bind_rows(lapply(1:nrow(perms), function(i) {
+  decompose_path(perms[i, ])
+}))
+
+
+perm_df <- map_dfr(1:nrow(perms), ~ decompose_path(perms[.x, ]))
+
+
+return(perm_df)
+
+#write.csv(perm_df, "permutation_contributions.csv", row.names = FALSE)
+#write.csv(shapley_df, "shapley_values.csv", row.names = FALSE)
+}
+```
+
+
+### function which computes the waterfall graph
+
+```{r}
+
+
+draw_waterfall <- function(shapley_df = shapley_df,df = df,vars = c("LULC", "AGE", "POP"),start_val = 90, end_val = 18,title_ici ="Change in population exposed to heat",subtitle_ici = "Thousands of people, age 65+, Tn > 15°C",put_rect_text_outside_when_value_below = 27)
+{
+  # =========================
+# VALUE FUNCTION
+# =========================
+
+get_value <- function(state) {
+  
+  conds <- Map(function(var) {
+    df[[var]] == state[[var]]
+  }, vars)
+  
+  rows <- Reduce(`&`, conds)
+  
+  val <- df$value[rows]
+  
+  if (length(val) != 1) {
+    stop("State not uniquely matched")
+  }
+  
+  return(val)
+}
+
+# =========================
+# ALL PERMUTATIONS
+# =========================
+k <- length(vars)
+
+# =========================
+# START / END VALUES
+# =========================
+v_start <- get_value(setNames(rep(start_val, k), vars))
+v_end   <- -get_value(setNames(rep(end_val, k), vars))
+
+
+wf <- data.frame(
+  step = c("If population\nand land use\nas in 1990", shapley_df$variable, "If population\nand land use\nas in 2018"),
+  value = c(v_start, shapley_df$shapley, v_end),
+  type = c("total", rep("change", k), "total")
+)
+
+
+levels <- wf$step
+
+# =========================
+# SETUP for graph
+# =========================
+data1 <- wf  %>%
+    mutate(step = factor(step, levels = levels),
+        ymin = round(cumsum(value),  length(vars)),
+        ymax = lag(cumsum(value), default = 0),
+        xmin = c(head(step, -1), NA),
+        xmax = c(tail(step, -1), NA),
+        Impact = ifelse(step %in% c(as.character(wf$step[1]), as.character(wf$step[nrow(wf)])),"Budget",
+                        ifelse(value > 0, "Increase", "Decrease")
+           )) %>% 
+  mutate(ymin=ymin/1000,
+         ymax = ymax /1000) %>% 
+  mutate(step2 = as.factor(case_when(
+          # step == "LULC" ~ "impact of\nland-use change\non urban climate",
+          # step == "year" ~ "climate change",
+          # step == "AGE" ~ "change in the ratio\nof people aged 65+\nin the population",
+          # step == "POP" ~ "change in the\nlocation of people\naged 65+ within\nthe region",
+          # step == "REP" ~ "global population\nincrease in the\nregion",
+          # step == "REP_age" ~ "change in the ratio\nof people aged 65+\nin the population",
+          step == "LULC" ~ "Land-use change\n(urban\nclimate)",
+          step == "year" ~ "Climate change",
+          step == "AGE" ~ "Change in the ratio\nof people aged 65+\nin the population",
+          step == "POP" ~ "Location of\npeople aged 65+\nwithin the region",
+          step == "REP" ~ "Total population\nincrease",
+          step == "REP_age" ~ "Population\nage structure",
+        TRUE ~ step)))
+
+# =========================
+# WATERFALL PLOT
+# =========================
+
+w <- 0.7  #use to set width of bars
+
+g <- data1 %>% 
+  mutate(label_ici = round(ymin-ymax)) %>% 
+  mutate(label_ici = if_else(step == "If population\nand land use\nas in 2018",-label_ici,label_ici)) %>% 
+  ggplot() +
+    geom_rect(aes(xmin = as.integer(step) - w/2,
+                  xmax = as.integer(step) + w/2, ymin = ymin, ymax = ymax,
+                  fill = Impact), colour = "black") +
+    scale_x_discrete(labels =data1$step2 ,limits = levels) +
+    scale_fill_manual(values = (c("Decrease" = "#FAAB18",  "Increase" = "#1380A1" , "Budget" = "black"))) +
+  geom_segment(data = data1[1:(nrow(data1) -1),],
+               aes(x = xmin,
+                   xend = xmax,
+                   y = ymin,
+                   yend = ymin),
+               linetype="dashed")+
+  geom_text(aes(x = as.integer(step) ,
+                y = if_else(abs(ymin-ymax)> put_rect_text_outside_when_value_below,
+                            ymin /2 + ymax /2,
+                           ymin /2 + ymax /2- put_rect_text_outside_when_value_below
+                            ), 
+                label = label_ici,
+                color = abs(ymin-ymax)< put_rect_text_outside_when_value_below #(Impact != "Budget")
+                                ),
+            size=7)+
+  scale_color_manual(values = c("white","black"))+
+  bbc_style()+
+   theme(legend.position = "none",
+         axis.text.x = element_text(angle=0,size=16),) +
+    ggtitle(title_ici,
+          subtitle = subtitle_ici)+
+  geom_hline(yintercept =0)
+
+return(g)
+
+#write.csv(perm_df, "permutation_contributions.csv", row.names = FALSE)
+#write.csv(shapley_df, "shapley_values.csv", row.names = FALSE)
+}
+
+```
+
+# results
+
+## cumulative graph
+
+```{r}
+
+
+# Reshape to long format
+df_long <- final_data %>%
+  filter(year %in% c(2017,2018,2019,2020,2021,2022)) %>% 
+  dplyr::select(`65+_90`,`65+_18`,nb_nuit_trop_C,nb_nuit_trop_D,year,INSEE_COM) %>% 
+  rename("pop_1990" = "65+_90",
+         "pop_2018" = "65+_18",
+         "hot_days_1990" = "nb_nuit_trop_C",
+         "hot_days_2018" = "nb_nuit_trop_D") %>% 
+  pivot_longer(
+    cols = c(pop_1990, pop_2018, hot_days_1990, hot_days_2018),
+    names_to = c(".value", "scenario"),
+    names_pattern = "(.+)_(1990|2018)"
+  ) %>%
+  rename(population = pop, hot_days = hot_days) %>%
+  mutate(scenario = paste("If population and land use\nwere as in", scenario))
+
+# For each hot_days threshold, compute cumulative population exceeding it
+hot_day_vals <- sort(unique(df_long$hot_days))
+
+cumulative_df <- df_long %>%
+  group_by(scenario,year) %>%
+  reframe(
+    hot_days_threshold = hot_day_vals,
+    cum_pop = sapply(hot_day_vals, function(x) {
+      sum(population[hot_days >= x])
+    })
+  )
+
+cumulative_df %>% filter(hot_days_threshold ==1)
+cumulative_df %>% filter(hot_days_threshold ==11) %>% 
+  pivot_wider(names_from = scenario, values_from = cum_pop) %>% 
+  mutate(ratio = `If population and land use\nwere as in 2018`/`If population and land use\nwere as in 1990`)
+
+# Plot
+p <- ggplot(cumulative_df, aes(x = hot_days_threshold, y = cum_pop / 1e6, color = scenario, fill = scenario)) +
+  geom_step(linewidth = 1) +
+  labs(
+    title = "Cumulative population aged  65 years and over\nexposed to at least X tropical nights",
+    x = "Number of tropical nights (threshold)",
+    y = "Cumulative population (millions)",
+    color = "",
+    fill = ""
+  ) +
+  geom_hline(yintercept=0)+
+  geom_vline(xintercept=0)+
+  facet_wrap(~ year) +
+  bbc_style()+
+  theme(
+    axis.ticks.x = element_line(colour = "#333333"),
+    axis.ticks.length =  unit(0.26, "cm"),
+    legend.position = "top", 
+    legend.justification = "left",
+    #axis.ticks.x = element_line(colour = "#333333"), 
+    #axis.ticks.length =  unit(0.26, "cm"),
+    axis.title = element_text(angle=0,size=16),
+    panel.grid.major.x = element_line(color="#cbcbcb"), 
+  )
+p
+  # theme_minimal(base_size = 18) +
+  # theme(legend.position = "top")
+
+ggsave(paste0("./outputs/par_canicule/cumulative.png"),plot=p,
+       width = 2666/250,
+       height= 1875/250,
+       unit="in")
+```
+
+## graph for each year and each threshold
+
+Here, to change the temperature threshold, change the variables `nb_nuit_trop_C` and `nb_nuit_trop_D` by `nb_nuit_trop_C_18` and `nb_nuit_trop_D_18` to use 18°C as a threshold, `nb_nuit_trop_C_19` and `nb_nuit_trop_D_19` to use 19°C as a threshold etc.
+
+```{r, warnings=False }
+
+
+#memoire_df <- read_parquet("./data/memoire_df.parquet")
+# for (year_ici in c(2021))
+# {
+#   
+#   for (seuil in 10)
+#   { 
+
+memoire_df <- data_frame()
+for (year_ici in c(2017,2018,2019,2020,2021,2022))
+{
+
+  for (seuil in seq(3,12))
+  {
+    
+    tmp <- final_data %>% 
+      filter(year == year_ici)
+    
+    df <- final_data %>% 
+      filter(year == year_ici) %>% 
+      mutate(seuil_18 = nb_nuit_trop_D >seuil,
+             seuil_90 = nb_nuit_trop_C > seuil) %>% 
+      group_by(year,INSEE_COM) %>% 
+      summarise(
+        LULC90_POP90 = sum( `65+_90` * seuil_90 ),
+        LULC90_POP18 = sum( `65+_18` * seuil_90 ),
+        LULC18_POP90 = sum( `65+_90` * seuil_18 ),
+        LULC18_POP18 = sum( `65+_18` * seuil_18 ),
+        .groups = "drop_last"
+      ) %>% 
+      pivot_longer(cols=-c(year,INSEE_COM)) %>% 
+      separate_wider_delim(cols = name,delim="_",names = c("LULC","POP")) %>% 
+      separate_wider_position(LULC,widths = c( 4,LULC = 2)) %>% 
+      separate_wider_position(POP,widths = c( 3,POP = 2)) %>% 
+      group_by(,LULC,POP) %>% 
+      summarise(value=sum(value),.groups = "drop_last")
+    
+    pop_totale_tmp <- final_data %>% 
+      filter(year == 2020) %>% #peu importe, c'est juste pour ne garder qu'une année
+      ungroup() %>% 
+      summarise(
+        pop_totale_1990 = sum(popTOT_90),
+        pop_totale_2018 = sum(popTOT_18),
+        pop_65_1990 = sum(`65+_90`),
+        pop_65_2018 = sum(`65+_18`),
+      )
+    
+    ratio_65_1990 = pop_totale_tmp$pop_65_1990/pop_totale_tmp$pop_totale_1990 
+    ratio_65_2018 = pop_totale_tmp$pop_65_2018/pop_totale_tmp$pop_totale_2018 
+    
+    df2<- df %>% 
+      mutate(REP = 90,
+             value=if_else(POP==18,value * pop_totale_tmp$pop_totale_1990/pop_totale_tmp$pop_totale_2018,value))
+    
+    df3 <- df %>% 
+      mutate(REP = 18, 
+             value=if_else(POP==90,value * pop_totale_tmp$pop_totale_2018/pop_totale_tmp$pop_totale_1990,value))
+    
+    df_tmp <- rbind(df2,df3)
+    
+    df2<- df_tmp %>% 
+      mutate(REP_age = 90,
+             value=if_else(POP==18,value*ratio_65_1990/ratio_65_2018,value))
+    
+    df3 <- df_tmp %>% 
+      mutate(REP_age = 18, 
+             value=if_else(POP==90,value*ratio_65_2018/ratio_65_1990,value))
+    
+    df_tmp <- rbind(df2,df3) %>% 
+      dplyr::select("REP","REP_age" ,"POP" ,"LULC","value") 
+    
+    perm_df <- compute_permut(df_tmp,vars = c(  "REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18) #"AGE",
+    
+    shapley_df <- perm_df %>%
+      group_by(variable) %>%
+      summarise(
+        shapley = mean(contribution),
+        .groups = "drop"
+      ) %>% 
+      mutate(ordre=factor(variable,levels = c("REP","REP_age", "POP","LULC")))
+    
+    min_max <- perm_df %>% 
+      group_by(variable) %>% 
+      summarise(mini = min(contribution),
+                maxi = max(contribution),
+                quant75 = quantile(contribution,probs = 0.75),
+                quant25 = quantile(contribution,probs = 0.25))
+    
+    #variable qui stocke les resultats du shapley
+    memoire_df <- shapley_df %>% 
+      dplyr::select(-variable) %>% 
+      mutate(year = year_ici,
+             seuil = seuil) %>% 
+      left_join(min_max,by = c("ordre" = "variable")) %>% 
+      rbind(memoire_df) 
+      
+    
+    if (draw_ici) 
+    {
+      g <- draw_waterfall(shapley_df,df_tmp,vars = c("REP",  "POP","LULC","REP_age"),start_val = 90, end_val = 18,title = paste0(year_ici," summer, number of people exposed to\nmore than ",seuil," tropical nights"),  subtitle = "Thousands of people, age 65+",put_rect_text_outside_when_value_below = 80)
+      g
+      
+      h <- perm_df %>% 
+        mutate(variable = as.factor(case_when(
+          # variable == "LULC" ~ "impact of\nland-use change\non urban climate",
+          # variable == "year" ~ "climate change",
+          # variable == "AGE" ~ "change in the ratio\nof people aged 65+\nin the population",
+          # variable == "POP" ~ "change in the\nlocation of people\naged 65+ within\nthe region",
+          # variable == "REP" ~ "global population\nincrease in the\nregion",
+          # variable == "REP_age" ~ "change in the ratio\nof people aged 65+\nin the population",
+          variable == "LULC" ~ "Land-use change\n(urban\nclimate)",
+          variable == "year" ~ "Climate change",
+          variable == "AGE" ~ "Change in the ratio\nof people aged 65+\nin the population",
+          variable == "POP" ~ "Location of\npeople aged 65+\nwithin the region",
+          variable == "REP" ~ "Total population\nincrease",
+          variable == "REP_age" ~ "Population\nage structure",
+          TRUE ~ variable))) %>% 
+        ggplot(aes(x=variable,y=contribution/1000))+
+        geom_jitter(alpha=0.7,fill="#1380A1",color="#1380A1",size=3)+
+        #geom_boxplot(alpha=0.,outlier.shape = NA)+
+        bbc_style()+
+        theme(legend.position = "none",
+              axis.text.x = element_text(angle=0,size=16),) +
+        ggtitle("Influence of each variable, for all permutations",
+                subtitle = paste0(year_ici," summer, thousands of people, age 65+,\nexposed to more than ",seuil," tropical nights"))+
+        geom_hline(yintercept =0)
+      
+      h
+      
+      ggsave(paste0("./outputs/par_canicule/canicule_",year_ici,"_",seuil,".png"),plot=g,
+             width = 2666/250,
+             height= 1875/250,
+             unit="in")
+      
+      ggsave(paste0("./outputs/par_canicule/distrib_canicule_",year_ici,"_",seuil,".png"),plot=h,
+             width = 2666/250,
+             height= 1875/250,
+             unit="in")
+    }
+  }
+}
+
+write_parquet(memoire_df,"./data/memoire_df.parquet")
+```
+
+## Summary graph
+
+```{r}
+
+memoire_df <- read_parquet("./data/memoire_df.parquet")
+
+g <- memoire_df %>% 
+  mutate(ordre = case_when(
+    ordre == "LULC" ~ "Land-use change\n(urban climate)",
+    ordre == "year" ~ "Climate change",
+    ordre == "AGE" ~ "Change in the ratio\nof people aged 65+\nin the population",
+    ordre == "POP" ~ "Location of\npeople aged 65+\nwithin the region",
+    ordre == "REP" ~ "Total population\nincrease",
+    ordre == "REP_age" ~ "Population\nage structure",
+    TRUE ~ ordre)) %>% 
+  ggplot(aes(x=seuil,y=shapley,group=ordre,color=ordre,fill = ordre))+
+  geom_line()+
+  geom_ribbon(aes(ymin = mini, ymax = maxi),
+              alpha = 0.3,
+              color = NA) +
+  facet_wrap(~year)+
+  geom_hline(yintercept = 0)+
+  bbc_style()+
+  labs(x="Number of tropical nights",y="Change in number of people 65+\nexposed to persistent\ntropical-night exposure")+
+  ggtitle("Evolution of the contribution of each variable",
+          subtitle = "When changing the number of tropical nights")+
+  theme(axis.ticks.x = element_line(colour = "#333333"),
+        axis.ticks.length =  unit(0.26, "cm"),
+        axis.title = ggplot2::element_text( size = 18, color = "#222222"))+
+  scale_x_continuous(breaks = seq(3,12,))
+
+g
+ggsave(paste0("./outputs/par_canicule/summary.png"),plot=g,
+       width = 2666/250,
+       height= 1875/250,
+       unit="in")
+```
